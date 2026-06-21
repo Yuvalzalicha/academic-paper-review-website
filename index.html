@@ -21,6 +21,7 @@
         <div class="nav-links">
           <a href="#search">Search</a>
           <a href="#recommendations">Recommendations</a>
+          <a href="#account">Account</a>
           <a href="#reading-list">Reading list</a>
         </div>
       </nav>
@@ -115,11 +116,56 @@
         <div class="results-grid" id="recommendation-results"></div>
       </section>
 
+      <section id="account" class="section surface" aria-labelledby="account-title">
+        <div class="section-heading split-heading">
+          <div>
+            <h2 id="account-title">Free account</h2>
+            <p id="account-copy">
+              Subscribe for free to save papers to your account and return to them later.
+            </p>
+          </div>
+          <button class="button ghost" id="sign-out-button" type="button" hidden>Sign out</button>
+        </div>
+        <div class="account-panel">
+          <form class="auth-form" id="auth-form">
+            <label for="auth-email">Email</label>
+            <input
+              id="auth-email"
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              autocomplete="email"
+              required
+            >
+            <label for="auth-password">Password</label>
+            <input
+              id="auth-password"
+              name="password"
+              type="password"
+              placeholder="At least 6 characters"
+              autocomplete="current-password"
+              minlength="6"
+              required
+            >
+            <div class="auth-actions">
+              <button class="button primary" id="sign-up-button" type="button">Subscribe free</button>
+              <button class="button ghost" id="sign-in-button" type="submit">Sign in</button>
+            </div>
+          </form>
+          <div class="account-card">
+            <strong id="account-state">Browser-only mode</strong>
+            <p id="account-status" role="status" aria-live="polite">
+              Add Supabase keys to enable real accounts. Until then, papers are saved only in this browser.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section id="reading-list" class="section surface" aria-labelledby="reading-list-title">
         <div class="section-heading split-heading">
           <div>
             <h2 id="reading-list-title">Reading list</h2>
-            <p>Saved locally in this browser with no account required.</p>
+            <p id="reading-list-copy">Saved locally in this browser with no account required.</p>
           </div>
           <button class="button ghost danger" id="clear-list-button" type="button">Clear list</button>
         </div>
@@ -175,6 +221,8 @@
       </article>
     </template>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
     <script src="script.js" defer></script>
   </body>
 </html>

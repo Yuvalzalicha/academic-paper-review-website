@@ -36,12 +36,24 @@ const els = {
   interestInput: document.querySelector("#interest-input"),
   recommendationStatus: document.querySelector("#recommendation-status"),
   recommendationResults: document.querySelector("#recommendation-results"),
+  authForm: document.querySelector("#auth-form"),
+  authEmail: document.querySelector("#auth-email"),
+  authPassword: document.querySelector("#auth-password"),
+  signUpButton: document.querySelector("#sign-up-button"),
+  signInButton: document.querySelector("#sign-in-button"),
+  signOutButton: document.querySelector("#sign-out-button"),
+  accountState: document.querySelector("#account-state"),
+  accountStatus: document.querySelector("#account-status"),
+  accountCopy: document.querySelector("#account-copy"),
+  readingListCopy: document.querySelector("#reading-list-copy"),
   readingListResults: document.querySelector("#reading-list-results"),
   clearListButton: document.querySelector("#clear-list-button"),
   cardTemplate: document.querySelector("#paper-card-template"),
 };
 
 let readingList = loadReadingList();
+let supabaseClient = null;
+let currentUser = null;
 
 function loadReadingList() {
   try {
@@ -54,6 +66,221 @@ function loadReadingList() {
 function saveReadingList() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(readingList));
   renderReadingList();
+}
+
+function isSupabaseConfigured() {
+  const config = window.PAPERTRAIL_SUPABASE || {};
+  return Boolean(config.url && config.anonKey);
+}
+
+function setAccountStatus(message, state = "Browser-only mode") {
+  els.accountState.textContent = state;
+  els.accountStatus.textContent = message;
+}
+
+function setAuthUiForUser(user) {
+  const isSignedIn = Boolean(user);
+  els.authForm.hidden = isSignedIn;
+  els.signOutButton.hidden = !isSignedIn;
+  els.accountCopy.textContent = isSignedIn
+    ? "Your saved papers are synced to your free PaperTrail account."
+    : "Subscribe for free to save papers to your account and return to them later.";
+  els.readingListCopy.textContent = isSignedIn
+    ? `Synced to ${user.email}.`
+    : "Saved locally in this browser with no account required.";
+}
+
+function getPaperForStorage(paper) {
+  const { relevance, ...paperForStorage } = paper;
+  return paperForStorage;
+}
+
+async function syncPaperToCloud(paper) {
+  if (!supabaseClient || !currentUser) return;
+
+  const { error } = await supabaseClient.from("saved_papers").upsert(
+    {
+      user_id: currentUser.id,
+      paper_id: paper.id,
+      paper: getPaperForStorage(paper),
+    },
+    { onConflict: "user_id,paper_id" }
+  );
+
+  if (error) {
+    setAccountStatus(`Could not sync this paper yet: ${error.message}`, "Sync needs attention");
+  }
+}
+
+async function removePaperFromCloud(paperId) {
+  if (!supabaseClient || !currentUser) return;
+
+  const { error } = await supabaseClient
+    .from("saved_papers")
+    .delete()
+    .eq("user_id", currentUser.id)
+    .eq("paper_id", paperId);
+
+  if (error) {
+    setAccountStatus(`Could not remove this paper from your account: ${error.message}`, "Sync needs attention");
+  }
+}
+
+async function clearCloudReadingList() {
+  if (!supabaseClient || !currentUser) return;
+
+  const { error } = await supabaseClient.from("saved_papers").delete().eq("user_id", currentUser.id);
+  if (error) {
+    setAccountStatus(`Could not clear your cloud reading list: ${error.message}`, "Sync needs attention");
+  }
+}
+
+async function loadCloudReadingList() {
+  if (!supabaseClient || !currentUser) return;
+
+  const { data, error } = await supabaseClient
+    .from("saved_papers")
+    .select("paper")
+    .eq("user_id", currentUser.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    setAccountStatus(`Signed in, but saved papers could not load: ${error.message}`, "Sync needs attention");
+    return;
+  }
+
+  const cloudPapers = (data || []).map((row) => row.paper).filter(Boolean);
+  const merged = [...cloudPapers, ...readingList].reduce((papers, paper) => {
+    if (!papers.some((savedPaper) => savedPaper.id === paper.id)) {
+      papers.push(paper);
+    }
+    return papers;
+  }, []);
+
+  readingList = merged;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(readingList));
+  await Promise.all(readingList.map((paper) => syncPaperToCloud(paper)));
+  renderReadingList();
+}
+
+async function refreshAuthSession() {
+  if (!supabaseClient) return;
+
+  const { data, error } = await supabaseClient.auth.getUser();
+  if (error || !data.user) {
+    currentUser = null;
+    setAuthUiForUser(null);
+    return;
+  }
+
+  currentUser = data.user;
+  setAuthUiForUser(currentUser);
+  setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
+  await loadCloudReadingList();
+}
+
+function initAuth() {
+  if (!isSupabaseConfigured()) {
+    setAuthUiForUser(null);
+    setAccountStatus(
+      "Accounts are not connected yet. Add your Supabase URL and anon key in supabase-config.js, then run supabase-schema.sql in Supabase.",
+      "Setup required"
+    );
+    return;
+  }
+
+  if (!window.supabase?.createClient) {
+    setAccountStatus("Supabase could not load. Check your connection and refresh.", "Setup required");
+    return;
+  }
+
+  const config = window.PAPERTRAIL_SUPABASE;
+  supabaseClient = window.supabase.createClient(config.url, config.anonKey);
+  refreshAuthSession();
+
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    currentUser = session?.user || null;
+    setAuthUiForUser(currentUser);
+    if (currentUser) {
+      setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
+      loadCloudReadingList();
+    } else {
+      setAccountStatus("Signed out. Papers are saved only in this browser.", "Browser-only mode");
+      renderReadingList();
+    }
+  });
+}
+
+async function handleSignUp() {
+  if (!supabaseClient) {
+    setAccountStatus("Account setup is not connected yet. Add Supabase keys first.", "Setup required");
+    return;
+  }
+
+  if (!els.authForm.reportValidity()) return;
+
+  els.signUpButton.disabled = true;
+  setAccountStatus("Creating your free account...", "Working");
+
+  const { data, error } = await supabaseClient.auth.signUp({
+    email: els.authEmail.value,
+    password: els.authPassword.value,
+  });
+
+  els.signUpButton.disabled = false;
+
+  if (error) {
+    setAccountStatus(error.message, "Sign up failed");
+    return;
+  }
+
+  currentUser = data.user;
+  if (currentUser) {
+    setAuthUiForUser(currentUser);
+    setAccountStatus(`Account created for ${currentUser.email}. Your reading list is synced.`, "Account active");
+    await loadCloudReadingList();
+  } else {
+    setAccountStatus("Check your email to confirm your account, then sign in.", "Confirm email");
+  }
+}
+
+async function handleSignIn(event) {
+  event.preventDefault();
+  if (!supabaseClient) {
+    setAccountStatus("Account setup is not connected yet. Add Supabase keys first.", "Setup required");
+    return;
+  }
+
+  if (!els.authForm.reportValidity()) return;
+
+  els.signInButton.disabled = true;
+  setAccountStatus("Signing in...", "Working");
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({
+    email: els.authEmail.value,
+    password: els.authPassword.value,
+  });
+
+  els.signInButton.disabled = false;
+
+  if (error) {
+    setAccountStatus(error.message, "Sign in failed");
+    return;
+  }
+
+  currentUser = data.user;
+  setAuthUiForUser(currentUser);
+  setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
+  await loadCloudReadingList();
+}
+
+async function handleSignOut() {
+  if (!supabaseClient) return;
+
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  setAuthUiForUser(null);
+  setAccountStatus("Signed out. Papers are saved only in this browser.", "Browser-only mode");
 }
 
 function cleanText(value, fallback = "Not listed") {
@@ -670,11 +897,13 @@ function isSaved(paperId) {
   return readingList.some((paper) => paper.id === paperId);
 }
 
-function toggleSaved(paper) {
+async function toggleSaved(paper) {
   if (isSaved(paper.id)) {
     readingList = readingList.filter((savedPaper) => savedPaper.id !== paper.id);
+    await removePaperFromCloud(paper.id);
   } else {
     readingList = [paper, ...readingList];
+    await syncPaperToCloud(paper);
   }
 
   saveReadingList();
@@ -818,10 +1047,15 @@ async function handleRecommendations(event) {
 
 els.searchForm.addEventListener("submit", handleSearch);
 els.interestForm.addEventListener("submit", handleRecommendations);
-els.clearListButton.addEventListener("click", () => {
+els.authForm.addEventListener("submit", handleSignIn);
+els.signUpButton.addEventListener("click", handleSignUp);
+els.signOutButton.addEventListener("click", handleSignOut);
+els.clearListButton.addEventListener("click", async () => {
   readingList = [];
+  await clearCloudReadingList();
   saveReadingList();
   refreshSaveButtons();
 });
 
 renderReadingList();
+initAuth();
