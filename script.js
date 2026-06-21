@@ -301,6 +301,112 @@ function cleanText(value, fallback = "Not listed") {
   return value.replace(/\s+/g, " ").trim() || fallback;
 }
 
+function normalizeMathText(value) {
+  return cleanText(value, "")
+    .replace(/\\\(/g, "\\(")
+    .replace(/\\\)/g, "\\)")
+    .replace(/\\\[/g, "\\[")
+    .replace(/\\\]/g, "\\]")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([([{])\s+/g, "$1")
+    .replace(/\s+([)\]}])/g, "$1")
+    .replace(/\b([A-Za-z])\s+\^\s*([0-9A-Za-z+-]+)/g, "$1^$2")
+    .replace(/\b([A-Za-z])\s+_\s*([0-9A-Za-z+-]+)/g, "$1_$2")
+    .replace(/(^|[^\\])\b(alpha|beta|gamma|delta|epsilon|lambda|mu|pi|sigma|theta|omega)\b/g, (match, prefix, name) => {
+      const greek = {
+        alpha: "α",
+        beta: "β",
+        gamma: "γ",
+        delta: "δ",
+        epsilon: "ε",
+        lambda: "λ",
+        mu: "μ",
+        pi: "π",
+        sigma: "σ",
+        theta: "θ",
+        omega: "ω",
+      };
+      return `${prefix}${greek[name] || name}`;
+    });
+}
+
+function renderRichText(target, value) {
+  target.innerHTML = richTextHtml(value);
+}
+
+function richTextHtml(value) {
+  const escaped = escapeHtml(normalizeMathText(value));
+  return renderMathFallback(escaped);
+}
+
+function renderMathFallback(escapedText) {
+  return escapedText
+    .replace(/\\\[((?:.|\n)*?)\\\]/g, (_match, expression) => mathHtml(expression, "math-display"))
+    .replace(/\$\$((?:.|\n)*?)\$\$/g, (_match, expression) => mathHtml(expression, "math-display"))
+    .replace(/\\\((.*?)\\\)/g, (_match, expression) => mathHtml(expression, "math-inline"))
+    .replace(/(^|[^\\])\$([^$\n]+?)\$/g, (_match, prefix, expression) => `${prefix}${mathHtml(expression, "math-inline")}`)
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, (_match, numerator, denominator) =>
+      mathHtml(`\\frac{${numerator}}{${denominator}}`, "math-inline")
+    )
+    .replace(/\\sqrt\{([^{}]+)\}/g, (_match, radicand) => mathHtml(`\\sqrt{${radicand}}`, "math-inline"))
+    .replace(/\\(alpha|beta|gamma|delta|epsilon|lambda|mu|pi|sigma|theta|omega)\b/g, (_match, name) =>
+      readableMathExpression(`\\${name}`)
+    );
+}
+
+function mathHtml(expression, className) {
+  return `<span class="${className}">${readableMathExpression(expression)}</span>`;
+}
+
+function readableMathExpression(expression) {
+  const greek = {
+    "\\alpha": "α",
+    "\\beta": "β",
+    "\\gamma": "γ",
+    "\\delta": "δ",
+    "\\epsilon": "ε",
+    "\\lambda": "λ",
+    "\\mu": "μ",
+    "\\pi": "π",
+    "\\sigma": "σ",
+    "\\theta": "θ",
+    "\\omega": "ω",
+  };
+  const operators = {
+    "\\sum": "∑",
+    "\\prod": "∏",
+    "\\int": "∫",
+    "\\infty": "∞",
+    "\\partial": "∂",
+    "\\nabla": "∇",
+    "\\approx": "≈",
+    "\\neq": "≠",
+    "\\leq": "≤",
+    "\\geq": "≥",
+    "\\times": "×",
+    "\\cdot": "·",
+    "\\pm": "±",
+    "\\rightarrow": "→",
+    "\\to": "→",
+  };
+
+  return expression
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "($1)/($2)")
+    .replace(/\\sqrt\{([^{}]+)\}/g, "√($1)")
+    .replace(/\\(?:left|right)/g, "")
+    .replace(/\{([^{}]+)\}/g, "$1")
+    .replace(/\\[a-zA-Z]+/g, (command) => greek[command] || operators[command] || command.replace("\\", ""))
+    .replace(/\s+/g, " ")
+    .replace(/\s*([=+\-*<>≤≥≈≠×·±→])\s*/g, " $1 ")
+    .trim();
+}
+
+function typesetMath(root = document.body) {
+  if (window.MathJax?.typesetPromise) {
+    window.MathJax.typesetPromise([root]).catch(() => {});
+  }
+}
+
 function invertAbstract(index) {
   if (!index) return "";
 
@@ -311,7 +417,7 @@ function invertAbstract(index) {
     });
   });
 
-  return cleanText(words.filter(Boolean).join(" "), "");
+  return normalizeMathText(words.filter(Boolean).join(" "));
 }
 
 function normalizeSearchText(value) {
@@ -540,6 +646,30 @@ function getCitationSignal(paper) {
   return "OpenAlex does not list citations yet, so treat the paper as something to evaluate directly rather than as established consensus.";
 }
 
+function makeStudentPreview(paper) {
+  const concepts = getConceptText(paper);
+  const sentences = getSentences(paper.summary, 3);
+  const firstClaim = sentences[0] || `This paper sits in the area of ${concepts}.`;
+  const secondClaim =
+    sentences[1] ||
+    "Before reading, identify the exact problem, the evidence used, and the authors' main contribution.";
+
+  return [
+    `Student preview: ${firstClaim}`,
+    `Why it matters: the paper connects to ${concepts}, so the useful pre-reading task is to understand the field vocabulary before judging the details.`,
+    `Reading target: ${secondClaim}`,
+  ].join(" ");
+}
+
+function makeEquationGuide(paper) {
+  const concepts = getConceptText(paper);
+  return [
+    `When you meet equations, do not start by manipulating symbols. First label each variable in plain language and connect it back to ${concepts}.`,
+    "For every formula, ask: what quantity is being measured, what is being optimized or compared, what assumptions make the equation valid, and what would break if those assumptions fail?",
+    "If the paper uses models, losses, probabilities, statistical tests, or physical quantities, rewrite the equation as one sentence before reading the derivation.",
+  ];
+}
+
 function makeFullReview(paper) {
   const concepts = getConceptText(paper);
   const abstractSentences = getSentences(paper.summary, 5);
@@ -550,14 +680,39 @@ function makeFullReview(paper) {
 
   return [
     {
-      title: "Extensive summary",
+      title: "Student pre-reading brief",
+      paragraphs: [
+        makeStudentPreview(paper),
+        "Use this guide before opening the paper: first build the vocabulary, then predict what the authors must prove, and only then read the technical sections. That order makes the paper feel less like a wall of jargon and more like an argument you can test.",
+      ],
+      bullets: [
+        `Probable field context: ${concepts}.`,
+        `Likely central question: ${likelyQuestion}`,
+        "What you should be able to explain after reading: the problem, the method or argument, the evidence, the limits, and why the paper is worth citing or not citing.",
+      ],
+    },
+    {
+      title: "Extensive summary for students",
       paragraphs: [
         hasAbstract
-          ? `This work, "${paper.title}", is best approached as a ${paper.type} in ${concepts}. The available abstract suggests the paper is concerned with the problem space described here: ${paper.summary}`
+          ? `This work, "${paper.title}", is best approached as a ${paper.type} in ${concepts}. The available abstract suggests the paper is concerned with this problem space: ${paper.summary}`
           : `This work, "${paper.title}", is listed as a ${paper.type} in ${concepts}. OpenAlex does not provide an abstract, so this review is a structured reading guide based on the title, venue, year, citation data, and topic tags rather than a claim that the full paper has been read.`,
         `${getCitationSignal(paper)} It was published in ${paper.year} through ${paper.source}, and the listed access status is ${
           paper.isOpenAccess ? "open access" : "not marked open access"
         } in OpenAlex.`,
+        "Before reading the full text, write down what result would convince you and what result would make you skeptical. This turns passive reading into active evaluation.",
+      ],
+    },
+    {
+      title: "Concept map before reading",
+      paragraphs: [
+        `Treat ${concepts} as the concept map for your first pass. Your job is to see which concept is the main object of study, which concepts are tools, and which concepts are background context.`,
+      ],
+      bullets: [
+        "Main object: what phenomenon, model, population, material, or problem is being studied?",
+        "Mechanism: what relationship or process do the authors think explains the result?",
+        "Evidence: what data, examples, proof, experiment, simulation, or comparison supports the claim?",
+        "Boundary: where might the conclusion stop being true?",
       ],
     },
     {
@@ -570,6 +725,16 @@ function makeFullReview(paper) {
         `Core concepts to review first: ${concepts}.`,
         "Look for the paper's definition of its main construct, model, population, or phenomenon.",
         "Track whether the paper is testing a theory, proposing a method, reviewing prior work, or applying an existing idea to a new setting.",
+      ],
+    },
+    {
+      title: "Mathematics and notation guide",
+      paragraphs: makeEquationGuide(paper),
+      bullets: [
+        "Circle definitions of variables the first time they appear.",
+        "Translate each equation into plain English before reading the next paragraph.",
+        "Separate definitions, assumptions, objective functions, and final results; they play different roles.",
+        "If notation changes between sections, make a small symbol table in your notes.",
       ],
     },
     {
@@ -605,6 +770,7 @@ function makeFullReview(paper) {
         "Introduction: identify the gap. The gap tells you why the paper exists.",
         "Background or related work: note which theories, studies, or methods the authors treat as foundational.",
         "Methods: ask whether the design can actually answer the question. Watch sample size, assumptions, variables, measures, and evaluation criteria.",
+        "Equations or model section: define every symbol, identify the objective, and write the equation's purpose in words.",
         "Results: separate descriptive results from causal or interpretive claims.",
         "Discussion: look for limitations, future work, and places where the authors move beyond the evidence.",
       ],
@@ -636,6 +802,7 @@ function makeFullReview(paper) {
         "Two to three sentences summarizing the method or argument.",
         "One paragraph on the main contribution.",
         "One paragraph on limitations or missing context.",
+        "One short note about the most important equation, model, assumption, or definition if the paper is technical.",
         "A final judgment: useful, convincing, promising but incomplete, or not reliable enough yet.",
       ],
     },
@@ -652,7 +819,7 @@ function appendReviewSection(parent, section) {
 
   (section.paragraphs || []).forEach((paragraphText) => {
     const paragraph = document.createElement("p");
-    paragraph.textContent = paragraphText;
+    renderRichText(paragraph, paragraphText);
     wrapper.append(paragraph);
   });
 
@@ -660,7 +827,7 @@ function appendReviewSection(parent, section) {
     const list = document.createElement("ul");
     section.bullets.forEach((bulletText) => {
       const item = document.createElement("li");
-      item.textContent = bulletText;
+      renderRichText(item, bulletText);
       list.append(item);
     });
     wrapper.append(list);
@@ -684,15 +851,15 @@ function slugifyTitle(title) {
 
 function renderReviewSectionHtml(section) {
   const paragraphs = (section.paragraphs || [])
-    .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
+    .map((paragraph) => `<p>${richTextHtml(paragraph)}</p>`)
     .join("");
   const bullets = section.bullets?.length
-    ? `<ul>${section.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`
+    ? `<ul>${section.bullets.map((bullet) => `<li>${richTextHtml(bullet)}</li>`).join("")}</ul>`
     : "";
 
   return `
     <section>
-      <h2>${escapeHtml(section.title)}</h2>
+      <h2>${richTextHtml(section.title)}</h2>
       ${paragraphs}
       ${bullets}
     </section>
@@ -799,6 +966,27 @@ function makePrintableReviewHtml(paper, reviewSections) {
         font-size: 10pt;
       }
 
+      .math-inline,
+      .math-display {
+        border: 1px solid #999;
+        border-radius: 3px;
+        background: #f6f6f6;
+        font-family: "Courier New", Courier, monospace;
+      }
+
+      .math-inline {
+        display: inline-block;
+        padding: 0 3px;
+      }
+
+      .math-display {
+        display: block;
+        margin: 8px 0;
+        padding: 8px 10px;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+
       .actions {
         margin: 24px 0;
         text-align: center;
@@ -824,10 +1012,10 @@ function makePrintableReviewHtml(paper, reviewSections) {
   <body>
     <header>
       <p class="label">PaperTrail LaTeX-Style Reading Guide</p>
-      <h1>${escapeHtml(paper.title)}</h1>
-      <p class="meta">${escapeHtml(paper.authors)}</p>
-      <p class="meta">${escapeHtml(paper.source)} · ${escapeHtml(paper.date)} · ${escapeHtml(paper.type)}</p>
-      <p class="meta">Topics: ${escapeHtml(concepts)}</p>
+      <h1>${richTextHtml(paper.title)}</h1>
+      <p class="meta">${richTextHtml(paper.authors)}</p>
+      <p class="meta">${richTextHtml(paper.source)} · ${richTextHtml(paper.date)} · ${richTextHtml(paper.type)}</p>
+      <p class="meta">Topics: ${richTextHtml(concepts)}</p>
     </header>
 
     <div class="actions">
@@ -837,7 +1025,7 @@ function makePrintableReviewHtml(paper, reviewSections) {
 
     <div class="abstract-box">
       <h2>Abstract-Based Summary</h2>
-      <p>${escapeHtml(paper.summary)}</p>
+      <p>${richTextHtml(paper.summary)}</p>
     </div>
 
     ${reviewSections.map(renderReviewSectionHtml).join("")}
@@ -862,6 +1050,17 @@ function makePrintableReviewHtml(paper, reviewSections) {
       </ul>
       <p class="small-note">This guide is generated from OpenAlex metadata and available abstract text. Use it as a structured reading aid, then verify details in the original paper.</p>
     </section>
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [["$", "$"], ["\\\\(", "\\\\)"]],
+          displayMath: [["$$", "$$"], ["\\\\[", "\\\\]"]],
+          processEscapes: true
+        },
+        svg: { fontCache: "global" }
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
   </body>
 </html>`;
 }
@@ -899,7 +1098,7 @@ function openReviewPdfGuide(paper, email = "") {
   printableWindow.document.write(makePrintableReviewHtml(paper, reviewSections));
   printableWindow.document.close();
   printableWindow.focus();
-  printableWindow.setTimeout(() => printableWindow.print(), 300);
+  printableWindow.setTimeout(() => printableWindow.print(), 1000);
 
   if (email) {
     window.setTimeout(() => prepareReviewEmail(paper, email, fileName), 700);
@@ -949,9 +1148,9 @@ function renderPapers(container, papers, emptyMessage) {
 
     card.querySelector(".year").textContent = paper.year;
     card.querySelector(".source").textContent = paper.source;
-    card.querySelector("h3").textContent = paper.title;
-    card.querySelector(".authors").textContent = paper.authors;
-    card.querySelector(".summary").textContent = summary;
+    renderRichText(card.querySelector("h3"), paper.title);
+    renderRichText(card.querySelector(".authors"), paper.authors);
+    renderRichText(card.querySelector(".summary"), summary);
     card.querySelector(".paper-link").href = paper.url;
 
     const relevanceBadge = card.querySelector(".relevance-badge");
@@ -967,7 +1166,7 @@ function renderPapers(container, papers, emptyMessage) {
     const notesList = card.querySelector(".review-notes ul");
     makeReviewNotes(paper).forEach((note) => {
       const item = document.createElement("li");
-      item.textContent = note;
+      renderRichText(item, note);
       notesList.append(item);
     });
 
@@ -996,6 +1195,7 @@ function renderPapers(container, papers, emptyMessage) {
   });
 
   refreshSaveButtons();
+  typesetMath(container);
 }
 
 function renderReadingList() {
