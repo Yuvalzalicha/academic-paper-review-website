@@ -1,5 +1,9 @@
 const OPENALEX_BASE_URL = "https://api.openalex.org/works";
 const STORAGE_KEY = "papertrail-reading-list";
+const SUPABASE_FALLBACK_CONFIG = {
+  url: "https://iijjknxythzulznyisdt.supabase.co",
+  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlpamprbnh5dGh6dWx6bnlpc2R0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMzQ5NDcsImV4cCI6MjA5NzYxMDk0N30.Wxh3WAlFGtl_zJjpJaZs7ZVnlSfxhnHx4XP28zSL2xY",
+};
 const RESULT_LIMIT = 9;
 const CANDIDATE_LIMIT = 25;
 const STOP_WORDS = new Set([
@@ -69,8 +73,16 @@ function saveReadingList() {
 }
 
 function isSupabaseConfigured() {
-  const config = window.PAPERTRAIL_SUPABASE || {};
+  const config = getSupabaseConfig();
   return Boolean(config.url && config.anonKey);
+}
+
+function getSupabaseConfig() {
+  const configured = window.PAPERTRAIL_SUPABASE || {};
+  return {
+    url: configured.url || SUPABASE_FALLBACK_CONFIG.url,
+    anonKey: configured.anonKey || SUPABASE_FALLBACK_CONFIG.anonKey,
+  };
 }
 
 function setAccountStatus(message, state = "Browser-only mode") {
@@ -170,6 +182,7 @@ async function refreshAuthSession() {
   if (error || !data.user) {
     currentUser = null;
     setAuthUiForUser(null);
+    setAccountStatus("Account sync is connected. Sign up or sign in to save papers across devices.", "Account ready");
     return;
   }
 
@@ -194,7 +207,7 @@ function initAuth() {
     return;
   }
 
-  const config = window.PAPERTRAIL_SUPABASE;
+  const config = getSupabaseConfig();
   supabaseClient = window.supabase.createClient(config.url, config.anonKey);
   refreshAuthSession();
 
@@ -205,7 +218,7 @@ function initAuth() {
       setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
       loadCloudReadingList();
     } else {
-      setAccountStatus("Signed out. Papers are saved only in this browser.", "Browser-only mode");
+      setAccountStatus("Signed out. Sign in again to sync saved papers across devices.", "Account ready");
       renderReadingList();
     }
   });
@@ -280,7 +293,7 @@ async function handleSignOut() {
   await supabaseClient.auth.signOut();
   currentUser = null;
   setAuthUiForUser(null);
-  setAccountStatus("Signed out. Papers are saved only in this browser.", "Browser-only mode");
+  setAccountStatus("Signed out. Sign in again to sync saved papers across devices.", "Account ready");
 }
 
 function cleanText(value, fallback = "Not listed") {
