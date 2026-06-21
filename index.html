@@ -9,6 +9,7 @@
       content="Search academic papers, discover beginner-friendly recommendations, and save a local reading list."
     >
     <link rel="preconnect" href="https://api.openalex.org">
+    <link rel="preload" as="image" href="assets/quantum-hero.png">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -32,29 +33,21 @@
         <div class="hero-copy">
           <h1 id="hero-title">Find papers worth reading, then understand them faster.</h1>
           <p>
-            PaperTrail searches OpenAlex, turns metadata into beginner-friendly review notes,
-            and keeps your saved papers in this browser.
+            PaperTrail searches OpenAlex through a quantum-inspired discovery lens, turns metadata
+            into beginner-friendly review notes, and keeps your saved papers close.
           </p>
           <div class="hero-actions">
             <a class="button primary" href="#search">Search papers</a>
             <a class="button ghost" href="#recommendations">Get recommendations</a>
           </div>
+          <div class="hero-stats" aria-label="PaperTrail capabilities">
+            <span>Precise OpenAlex search</span>
+            <span>LaTeX-style review PDFs</span>
+            <span>Cloud reading lists</span>
+          </div>
         </div>
         <div class="hero-visual" aria-hidden="true">
-          <div class="paper-stack">
-            <article class="paper-sheet main-sheet">
-              <span class="sheet-line wide"></span>
-              <span class="sheet-line"></span>
-              <span class="sheet-line short"></span>
-              <div class="mini-chart">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            </article>
-            <article class="paper-sheet offset-one"></article>
-            <article class="paper-sheet offset-two"></article>
-          </div>
+          <img src="assets/quantum-hero.png" alt="">
         </div>
       </section>
 
