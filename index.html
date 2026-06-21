@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PaperTrail | Academic Paper Review</title>
+    <meta
+      name="description"
+      content="Search academic papers, discover beginner-friendly recommendations, and save a local reading list."
+    >
+    <link rel="preconnect" href="https://api.openalex.org">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Primary navigation">
+        <a class="brand" href="#top" aria-label="PaperTrail home">
+          <span class="brand-mark" aria-hidden="true">PT</span>
+          <span>PaperTrail</span>
+        </a>
+        <div class="nav-links">
+          <a href="#search">Search</a>
+          <a href="#recommendations">Recommendations</a>
+          <a href="#reading-list">Reading list</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">Find papers worth reading, then understand them faster.</h1>
+          <p>
+            PaperTrail searches OpenAlex, turns metadata into beginner-friendly review notes,
+            and keeps your saved papers in this browser.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#search">Search papers</a>
+            <a class="button ghost" href="#recommendations">Get recommendations</a>
+          </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="paper-stack">
+            <article class="paper-sheet main-sheet">
+              <span class="sheet-line wide"></span>
+              <span class="sheet-line"></span>
+              <span class="sheet-line short"></span>
+              <div class="mini-chart">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </article>
+            <article class="paper-sheet offset-one"></article>
+            <article class="paper-sheet offset-two"></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="search" class="section surface" aria-labelledby="search-title">
+        <div class="section-heading">
+          <h2 id="search-title">Search OpenAlex</h2>
+          <p>Look up papers by topic, author, method, or title.</p>
+        </div>
+        <form class="search-panel" id="search-form">
+          <label for="search-input">Paper search</label>
+          <div class="input-row">
+            <input
+              id="search-input"
+              name="query"
+              type="search"
+              placeholder="Try: machine learning in medical imaging"
+              autocomplete="off"
+              required
+            >
+            <button class="button primary" type="submit">Search</button>
+          </div>
+          <fieldset class="precision-controls">
+            <legend>Search precision</legend>
+            <label>
+              <input type="radio" name="precision" value="balanced">
+              <span>Balanced</span>
+            </label>
+            <label>
+              <input type="radio" name="precision" value="precise" checked>
+              <span>Precise</span>
+            </label>
+            <label>
+              <input type="radio" name="precision" value="exact">
+              <span>Exact phrase</span>
+            </label>
+          </fieldset>
+        </form>
+        <div class="status" id="search-status" role="status" aria-live="polite"></div>
+        <div class="results-grid" id="search-results"></div>
+      </section>
+
+      <section id="recommendations" class="section" aria-labelledby="recommendations-title">
+        <div class="section-heading">
+          <h2 id="recommendations-title">Recommendations</h2>
+          <p>Enter your interests and PaperTrail will find current papers that match.</p>
+        </div>
+        <form class="interest-panel" id="interest-form">
+          <label for="interest-input">Your research interests</label>
+          <textarea
+            id="interest-input"
+            name="interests"
+            rows="4"
+            placeholder="Example: interpretable AI, health equity, reproducible evaluation"
+            required
+          ></textarea>
+          <button class="button primary" type="submit">Recommend papers</button>
+        </form>
+        <div class="status" id="recommendation-status" role="status" aria-live="polite"></div>
+        <div class="results-grid" id="recommendation-results"></div>
+      </section>
+
+      <section id="reading-list" class="section surface" aria-labelledby="reading-list-title">
+        <div class="section-heading split-heading">
+          <div>
+            <h2 id="reading-list-title">Reading list</h2>
+            <p>Saved locally in this browser with no account required.</p>
+          </div>
+          <button class="button ghost danger" id="clear-list-button" type="button">Clear list</button>
+        </div>
+        <div class="results-grid" id="reading-list-results"></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>Powered by the OpenAlex API. Saved papers stay on this device.</p>
+    </footer>
+
+    <template id="paper-card-template">
+      <article class="paper-card">
+        <div class="card-topline">
+          <span class="year"></span>
+          <span class="source"></span>
+        </div>
+        <p class="relevance-badge"></p>
+        <h3></h3>
+        <p class="authors"></p>
+        <p class="summary"></p>
+        <div class="review-notes">
+          <strong>Quick beginner review</strong>
+          <ul></ul>
+        </div>
+        <details class="full-review">
+          <summary>Full review and breakdown</summary>
+          <div class="review-content"></div>
+          <div class="review-export">
+            <label>
+              Email PDF guide
+              <input
+                class="review-email-input"
+                type="email"
+                placeholder="you@example.com"
+                autocomplete="email"
+              >
+            </label>
+            <div class="export-actions">
+              <button class="button small review-download-button" type="button">Download PDF guide</button>
+              <button class="button small review-email-button" type="button">Create PDF + email</button>
+            </div>
+            <p>
+              Download opens a LaTeX-style printable guide you can save as PDF. Email opens the same
+              guide, then prepares a message so you can attach and send it.
+            </p>
+          </div>
+        </details>
+        <div class="card-actions">
+          <a class="button small paper-link" target="_blank" rel="noreferrer">Open paper</a>
+          <button class="button small save-button" type="button"></button>
+        </div>
+      </article>
+    </template>
+
+    <script src="script.js" defer></script>
+  </body>
+</html>
