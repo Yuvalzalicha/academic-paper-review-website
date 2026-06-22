@@ -237,7 +237,7 @@ function setAdminVisibility() {
 
   const canShowPanel = Boolean(currentUser);
   els.adminSection.hidden = !canShowPanel && window.location.hash !== "#admin";
-  els.adminNavLink.hidden = !isAdminUser;
+  els.adminNavLink.hidden = false;
   els.adminDashboard.hidden = !isAdminUser;
   els.adminRefreshButton.hidden = !isAdminUser;
   els.adminAccessCard.hidden = isAdminUser;
