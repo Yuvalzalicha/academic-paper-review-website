@@ -56,6 +56,15 @@ const els = {
   readingListResults: document.querySelector("#reading-list-results"),
   clearListButton: document.querySelector("#clear-list-button"),
   cardTemplate: document.querySelector("#paper-card-template"),
+  reviewModal: document.querySelector("#review-modal"),
+  reviewModalTitle: document.querySelector("#review-modal-title"),
+  reviewModalMeta: document.querySelector("#review-modal-meta"),
+  reviewModalContent: document.querySelector("#review-modal-content"),
+  reviewModalEmail: document.querySelector("#review-modal-email"),
+  reviewModalDownload: document.querySelector("#review-modal-download"),
+  reviewModalEmailButton: document.querySelector("#review-modal-email-button"),
+  reviewModalBackdrop: document.querySelector("#review-modal-backdrop"),
+  reviewCloseButton: document.querySelector("#review-close-button"),
 };
 
 let readingList = loadReadingList();
@@ -120,11 +129,10 @@ function restoreSavedView() {
     state.paperId && state.source ? document.getElementById(paperCardId(state.source, state.paperId)) : null;
 
   if (selectedCard) {
-    const details = selectedCard.querySelector(".full-review");
-    if (details && state.reviewOpen) {
-      details.open = true;
-    }
     selectedCard.scrollIntoView({ behavior: "auto", block: "start" });
+    if (state.reviewOpen) {
+      selectedCard.querySelector(".review-open-button")?.click();
+    }
     viewRestoreQueued = false;
     return;
   }
@@ -1277,6 +1285,51 @@ function renderExpandableSummary(card, paper) {
   });
 }
 
+function setModalPaperActions(paper) {
+  els.reviewModalDownload.onclick = () => openReviewPdfGuide(paper);
+  els.reviewModalEmailButton.onclick = () => {
+    const email = cleanText(els.reviewModalEmail.value, "");
+    if (!email || !els.reviewModalEmail.checkValidity()) {
+      els.reviewModalEmail.reportValidity();
+      return;
+    }
+    openReviewPdfGuide(paper, email);
+  };
+}
+
+function openReviewReader(paper, options = {}) {
+  const hash = options.hash || window.location.hash || "#search";
+  if (window.location.hash !== hash) {
+    history.replaceState(null, "", hash);
+  }
+
+  saveViewState({
+    hash,
+    paperId: paper.id,
+    reviewOpen: true,
+    source: options.source || "papers",
+  });
+
+  els.reviewModal.hidden = false;
+  document.body.classList.add("modal-open");
+  renderRichText(els.reviewModalTitle, paper.title);
+  els.reviewModalMeta.textContent = `${paper.authors} / ${paper.source}, ${paper.date}`;
+  els.reviewModalContent.replaceChildren();
+  makeFullReview(paper).forEach((section) => appendReviewSection(els.reviewModalContent, section));
+  els.reviewModalEmail.value = "";
+  setModalPaperActions(paper);
+  typesetMath(els.reviewModal);
+  els.reviewCloseButton.focus();
+}
+
+function closeReviewReader() {
+  if (els.reviewModal.hidden) return;
+  els.reviewModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  els.reviewModalContent.replaceChildren();
+  saveViewState({ reviewOpen: false });
+}
+
 function renderPapers(container, papers, emptyMessage, options = {}) {
   container.replaceChildren();
   const source = options.source || "papers";
@@ -1317,36 +1370,8 @@ function renderPapers(container, papers, emptyMessage, options = {}) {
       notesList.append(item);
     });
 
-    const reviewContent = card.querySelector(".review-content");
-    makeFullReview(paper).forEach((section) => appendReviewSection(reviewContent, section));
-
-    const fullReview = card.querySelector(".full-review");
-    fullReview.addEventListener("toggle", () => {
-      if (!fullReview.open) return;
-      const hash = options.hash || window.location.hash || "#search";
-      if (window.location.hash !== hash) {
-        history.replaceState(null, "", hash);
-      }
-      saveViewState({
-        hash,
-        paperId: paper.id,
-        reviewOpen: true,
-        source,
-      });
-    });
-
-    const reviewEmailInput = card.querySelector(".review-email-input");
-    card.querySelector(".review-download-button").addEventListener("click", () => {
-      openReviewPdfGuide(paper);
-    });
-
-    card.querySelector(".review-email-button").addEventListener("click", () => {
-      const email = cleanText(reviewEmailInput.value, "");
-      if (!email || !reviewEmailInput.checkValidity()) {
-        reviewEmailInput.reportValidity();
-        return;
-      }
-      openReviewPdfGuide(paper, email);
+    card.querySelector(".review-open-button").addEventListener("click", () => {
+      openReviewReader(paper, { hash: options.hash || "#search", source });
     });
 
     const saveButton = card.querySelector(".save-button");
@@ -1483,6 +1508,13 @@ els.interestForm.addEventListener("submit", handleRecommendations);
 els.authForm.addEventListener("submit", handleSignIn);
 els.signUpButton.addEventListener("click", handleSignUp);
 els.signOutButton.addEventListener("click", handleSignOut);
+els.reviewModalBackdrop.addEventListener("click", closeReviewReader);
+els.reviewCloseButton.addEventListener("click", closeReviewReader);
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !els.reviewModal.hidden) {
+    closeReviewReader();
+  }
+});
 els.clearListButton.addEventListener("click", async () => {
   readingList = [];
   await clearCloudReadingList();

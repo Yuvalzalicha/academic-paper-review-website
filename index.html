@@ -10,7 +10,7 @@
     >
     <link rel="preconnect" href="https://api.openalex.org">
     <link rel="preload" as="image" href="assets/quantum-hero.png">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260622-review-reader">
   </head>
   <body>
     <header class="site-header">
@@ -185,35 +185,49 @@
           <strong>Quick beginner review</strong>
           <ul></ul>
         </div>
-        <details class="full-review">
-          <summary>Full review and breakdown</summary>
-          <div class="review-content"></div>
-          <div class="review-export">
-            <label>
-              Email PDF guide
-              <input
-                class="review-email-input"
-                type="email"
-                placeholder="you@example.com"
-                autocomplete="email"
-              >
-            </label>
-            <div class="export-actions">
-              <button class="button small review-download-button" type="button">Download PDF guide</button>
-              <button class="button small review-email-button" type="button">Create PDF + email</button>
-            </div>
-            <p>
-              Download opens a LaTeX-style printable guide you can save as PDF. Email opens the same
-              guide, then prepares a message so you can attach and send it.
-            </p>
-          </div>
-        </details>
+        <div class="full-review">
+          <button class="review-open-button" type="button">Full review and breakdown</button>
+        </div>
         <div class="card-actions">
           <a class="button small paper-link" target="_blank" rel="noreferrer">Open paper</a>
           <button class="button small save-button" type="button"></button>
         </div>
       </article>
     </template>
+
+    <div class="review-modal" id="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-modal-title" hidden>
+      <button class="review-modal-backdrop" id="review-modal-backdrop" type="button" aria-label="Close review"></button>
+      <article class="review-reader">
+        <header class="review-reader-header">
+          <div>
+            <p class="reader-kicker">PaperTrail reader</p>
+            <h2 id="review-modal-title"></h2>
+            <p id="review-modal-meta"></p>
+          </div>
+          <button class="review-close-button" id="review-close-button" type="button" aria-label="Close review">Close</button>
+        </header>
+        <div class="review-reader-body" id="review-modal-content"></div>
+        <footer class="review-export review-reader-export">
+          <label>
+            Email PDF guide
+            <input
+              id="review-modal-email"
+              type="email"
+              placeholder="you@example.com"
+              autocomplete="email"
+            >
+          </label>
+          <div class="export-actions">
+            <button class="button small" id="review-modal-download" type="button">Download PDF guide</button>
+            <button class="button small" id="review-modal-email-button" type="button">Create PDF + email</button>
+          </div>
+          <p>
+            Download opens a LaTeX-style printable guide you can save as PDF. Email opens the same
+            guide, then prepares a message so you can attach and send it.
+          </p>
+        </footer>
+      </article>
+    </div>
 
     <script>
       window.MathJax = {
@@ -230,6 +244,6 @@
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=20260621"></script>
-    <script src="script.js?v=20260622-summary-expand" defer></script>
+    <script src="script.js?v=20260622-review-reader" defer></script>
   </body>
 </html>
