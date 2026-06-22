@@ -1246,6 +1246,28 @@ function refreshSaveButtons() {
   });
 }
 
+function renderExpandableSummary(card, paper) {
+  const summaryElement = card.querySelector(".summary");
+  const toggleButton = card.querySelector(".summary-toggle");
+  const previewLimit = 360;
+  const hasLongSummary = paper.summary.length > previewLimit;
+  const preview = hasLongSummary ? `${paper.summary.slice(0, previewLimit).trim()}...` : paper.summary;
+
+  renderRichText(summaryElement, preview);
+
+  if (!hasLongSummary) return;
+
+  toggleButton.hidden = false;
+  toggleButton.setAttribute("aria-expanded", "false");
+  toggleButton.addEventListener("click", () => {
+    const isExpanded = toggleButton.getAttribute("aria-expanded") === "true";
+    toggleButton.setAttribute("aria-expanded", String(!isExpanded));
+    toggleButton.textContent = isExpanded ? "Show full abstract" : "Show shorter abstract";
+    renderRichText(summaryElement, isExpanded ? preview : paper.summary);
+    typesetMath(summaryElement);
+  });
+}
+
 function renderPapers(container, papers, emptyMessage, options = {}) {
   container.replaceChildren();
   const source = options.source || "papers";
@@ -1260,15 +1282,13 @@ function renderPapers(container, papers, emptyMessage, options = {}) {
 
   papers.forEach((paper) => {
     const card = els.cardTemplate.content.firstElementChild.cloneNode(true);
-    const summary =
-      paper.summary.length > 360 ? `${paper.summary.slice(0, 357).trim()}...` : paper.summary;
 
     card.id = paperCardId(source, paper.id);
     card.querySelector(".year").textContent = paper.year;
     card.querySelector(".source").textContent = paper.source;
     renderRichText(card.querySelector("h3"), paper.title);
     renderRichText(card.querySelector(".authors"), paper.authors);
-    renderRichText(card.querySelector(".summary"), summary);
+    renderExpandableSummary(card, paper);
     card.querySelector(".paper-link").href = paper.url;
 
     const relevanceBadge = card.querySelector(".relevance-badge");

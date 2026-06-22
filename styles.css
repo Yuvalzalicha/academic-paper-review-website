@@ -548,6 +548,29 @@ mjx-container {
   flex: 1;
 }
 
+.summary-toggle {
+  align-self: flex-start;
+  border: 1px solid rgba(88, 230, 255, 0.36);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: #bff7ff;
+  background: rgba(88, 230, 255, 0.08);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.summary-toggle:hover {
+  border-color: rgba(255, 207, 112, 0.62);
+  background: rgba(255, 207, 112, 0.12);
+  transform: translateY(-1px);
+}
+
 .review-notes,
 .full-review {
   border-top: 1px solid var(--line);
