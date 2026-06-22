@@ -421,18 +421,7 @@ function richTextHtml(value) {
 }
 
 function renderMathFallback(escapedText) {
-  return escapedText
-    .replace(/\\\[((?:.|\n)*?)\\\]/g, (_match, expression) => mathHtml(expression, "math-display"))
-    .replace(/\$\$((?:.|\n)*?)\$\$/g, (_match, expression) => mathHtml(expression, "math-display"))
-    .replace(/\\\((.*?)\\\)/g, (_match, expression) => mathHtml(expression, "math-inline"))
-    .replace(/(^|[^\\])\$([^$\n]+?)\$/g, (_match, prefix, expression) => `${prefix}${mathHtml(expression, "math-inline")}`)
-    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, (_match, numerator, denominator) =>
-      mathHtml(`\\frac{${numerator}}{${denominator}}`, "math-inline")
-    )
-    .replace(/\\sqrt\{([^{}]+)\}/g, (_match, radicand) => mathHtml(`\\sqrt{${radicand}}`, "math-inline"))
-    .replace(/\\(alpha|beta|gamma|delta|epsilon|lambda|mu|pi|sigma|theta|omega)\b/g, (_match, name) =>
-      readableMathExpression(`\\${name}`)
-    );
+  return escapedText;
 }
 
 function mathHtml(expression, className) {
@@ -742,13 +731,90 @@ function makeStudentPreview(paper) {
   ].join(" ");
 }
 
+function makeExtensiveStudentSummary(paper, abstractSentences, hasAbstract) {
+  const concepts = getConceptText(paper);
+  const abstractMap = abstractSentences.length
+    ? abstractSentences
+        .map((sentence, index) => `Sentence ${index + 1}: ${sentence}`)
+        .join(" ")
+    : "No abstract sentences are available from OpenAlex, so this guide uses the title, venue, topics, and citation metadata as a reading scaffold.";
+
+  return [
+    hasAbstract
+      ? `This paper, "${paper.title}", should be read as a contribution to ${concepts}. The abstract gives the first version of the authors' argument: ${paper.summary}`
+      : `This paper, "${paper.title}", is listed as a ${paper.type} in ${concepts}. OpenAlex does not provide an abstract, so this section is a preparation guide rather than a substitute for reading the paper.`,
+    `For a student, the most important task is to separate four layers: the problem the authors care about, the theoretical idea or model they use, the evidence they bring, and the conclusion they want the reader to accept. Do not merge those layers too early. A paper can have an interesting problem but weak evidence, or strong technical execution but a narrow conclusion.`,
+    `A useful first-pass interpretation is: the paper is trying to move the reader from "there is a problem or gap in ${concepts}" to "this method, argument, experiment, proof, or analysis gives us a better way to understand it." While reading, keep asking what exactly changes between the beginning and the end of the paper.`,
+    `The abstract can be unpacked into a reading map. ${abstractMap} Treat each sentence as a clue: one usually states the background problem, one introduces the approach, one summarizes evidence or results, and one points toward the conclusion.`,
+    `${getCitationSignal(paper)} It was published in ${paper.year} through ${paper.source}, and OpenAlex marks the access status as ${
+      paper.isOpenAccess ? "open access" : "not open access or not clearly open"
+    }. Citation count is not proof of correctness, but it tells you whether the paper has entered a broader scholarly conversation.`,
+    "Before reading the full text, write a one-sentence prediction of the paper's contribution. After reading, compare your prediction to the authors' conclusion. The difference between those two sentences is where real understanding begins.",
+  ];
+}
+
 function makeEquationGuide(paper) {
   const concepts = getConceptText(paper);
   return [
-    `When you meet equations, do not start by manipulating symbols. First label each variable in plain language and connect it back to ${concepts}.`,
-    "For every formula, ask: what quantity is being measured, what is being optimized or compared, what assumptions make the equation valid, and what would break if those assumptions fail?",
-    "If the paper uses models, losses, probabilities, statistical tests, or physical quantities, rewrite the equation as one sentence before reading the derivation.",
+    `Mathematics in this paper should be read as a compressed language for claims about ${concepts}. Do not start by manipulating symbols. First label every object, then ask what role the equation plays in the argument: definition, model, assumption, objective, constraint, result, or evaluation metric.`,
+    "A common structure in technical papers is a model mapping inputs to outputs: \\(\\hat{y}=f_\\theta(x)\\). In words: the model \\(f\\), controlled by parameters \\(\\theta\\), takes an input \\(x\\) and produces a prediction \\(\\hat{y}\\). If the paper is not machine-learning oriented, the same idea still helps: identify the object being transformed and the rule doing the transformation.",
+    "If the paper optimizes something, expect an objective such as \\[\\mathcal{L}(\\theta)=\\frac{1}{n}\\sum_{i=1}^{n}\\ell\\big(f_\\theta(x_i),y_i\\big).\\] Read it as: choose parameters \\(\\theta\\) that make the average error or cost small across examples. Your job is to understand what counts as error, why that objective is appropriate, and what it ignores.",
+    "If the paper is probabilistic or statistical, look for expressions like \\(p(y\\mid x)\\), \\(\\mathbb{E}[X]\\), confidence intervals, likelihoods, priors, or estimators. Translate them into plain English: what is uncertain, what is conditioned on what, and what evidence changes the belief?",
+    "If the paper is quantum or physics-related, notation may include states, operators, and expectation values, for example \\(|\\psi\\rangle\\), \\(U(\\theta)\\), or \\[\\langle O\\rangle=\\langle\\psi|U(\\theta)^\\dagger O U(\\theta)|\\psi\\rangle.\\] Read this as: prepare a state, transform it, measure an observable, and interpret the resulting quantity.",
+    "Build a symbol table as you read. A useful table has columns for symbol, plain-English meaning, units or type, where it is defined, and why it matters. This prevents the classic student trap of recognizing the equation visually but not knowing what claim it supports.",
   ];
+}
+
+function makeTheoreticalBackgroundGuide(paper) {
+  const concepts = getConceptText(paper);
+  return {
+    title: "Theoretical background",
+    paragraphs: [
+      `Before reading, build a mental model of the field around ${concepts}. Theoretical background is not just "older papers"; it is the set of assumptions, definitions, standard problems, and accepted methods that make the current paper understandable.`,
+      "Start by identifying the object of study. Is the paper mainly about a phenomenon, a dataset, a mathematical model, an algorithm, a physical system, a population, a measurement procedure, or a conceptual debate? Once you know the object, the rest of the paper becomes easier to organize.",
+      "Next, identify the paper's theoretical tension. Most academic papers exist because something does not fully work yet: a theory fails in some setting, a model has a weakness, an empirical result is unexplained, a method is inefficient, or two parts of the literature do not fit together neatly.",
+      "Then separate background from contribution. Background explains the stage; contribution changes something on that stage. When you read the introduction and related work, mark every sentence as either context, gap, tool, assumption, or claim.",
+      "Finally, keep track of what would count as success inside this field. In some fields success means predictive accuracy; in others it means interpretability, proof, causal identification, experimental control, computational efficiency, physical plausibility, or explanatory power.",
+    ],
+    bullets: [
+      `Core concepts to review first: ${concepts}.`,
+      "Definitions: write down how the paper defines its central terms, not how you personally understand them.",
+      "Assumptions: list what the authors must assume for their method or argument to work.",
+      "Prior work: identify which earlier ideas the paper depends on and which earlier ideas it criticizes or improves.",
+      "Mechanism: state the proposed reason the result should happen, not just the result itself.",
+      "Scope: note the conditions under which the theory is supposed to apply.",
+      "Evaluation standard: determine what the field accepts as convincing evidence.",
+    ],
+  };
+}
+
+function makeFullPaperBreakdown(paper, likelyQuestion, hasAbstract) {
+  const concepts = getConceptText(paper);
+  return {
+    title: "Full paper breakdown",
+    paragraphs: [
+      "Use this as a section-by-section checklist while reading the actual paper. It is a structured map generated from the available abstract and metadata, so verify each point against the original PDF or publisher page.",
+    ],
+    bullets: [
+      `Title and topic: the title "${paper.title}" places the paper inside ${concepts}. Before reading, predict what problem the title implies and what kind of contribution would be meaningful.`,
+      `Research question: start with this likely question and refine it as you read: ${likelyQuestion}`,
+      hasAbstract
+        ? `Abstract: break the abstract into problem, method, evidence, and conclusion. The current abstract signal is: ${paper.summary}`
+        : "Abstract: OpenAlex does not provide one, so create your own after reading the introduction and conclusion.",
+      "Introduction: find the gap. Write one sentence beginning with: \"This paper is needed because...\"",
+      "Related work: list the papers, theories, or methods that the authors treat as foundations. Mark whether each one is being extended, corrected, compared against, or used as a tool.",
+      "Theory or framework: identify the model of the world the authors are using. Ask what variables, entities, assumptions, symmetries, mechanisms, or relationships matter in that framework.",
+      "Data, materials, or objects of study: determine what the paper actually studies. This may be a dataset, proof object, experimental system, simulation, corpus, benchmark, physical apparatus, or conceptual case.",
+      "Method: turn the method into a recipe. Step 1, what do they start with? Step 2, what transformation or analysis do they perform? Step 3, what output or evidence do they produce?",
+      "Mathematics and notation: create a symbol table and identify which equations are definitions, objectives, constraints, update rules, measurements, or final results.",
+      "Results: separate what is directly shown from what is interpreted. A table, theorem, plot, experiment, or benchmark is evidence; the sentence explaining its meaning is interpretation.",
+      "Figures and tables: read captions carefully. For each figure, write what changes on the axes or panels and what conclusion the authors want you to draw.",
+      "Discussion: look for the authors' own explanation of why the findings matter. This section often reveals the intended contribution more clearly than the results section.",
+      "Conclusion: identify the final claim. Ask whether it follows from the evidence or whether it depends on extra assumptions.",
+      "Limitations: search for restrictions in scope, data, assumptions, measurement, generalization, computational cost, sample size, or theoretical coverage.",
+      "Future work: write two follow-up studies: one that strengthens the paper's claim, and one that tries to break it.",
+    ],
+  };
 }
 
 function pickSentencesByKeywords(sentences, keywords, limit = 2) {
@@ -815,15 +881,7 @@ function makeFullReview(paper) {
     },
     {
       title: "Extensive summary for students",
-      paragraphs: [
-        hasAbstract
-          ? `This work, "${paper.title}", is best approached as a ${paper.type} in ${concepts}. The available abstract suggests the paper is concerned with this problem space: ${paper.summary}`
-          : `This work, "${paper.title}", is listed as a ${paper.type} in ${concepts}. OpenAlex does not provide an abstract, so this review is a structured reading guide based on the title, venue, year, citation data, and topic tags rather than a claim that the full paper has been read.`,
-        `${getCitationSignal(paper)} It was published in ${paper.year} through ${paper.source}, and the listed access status is ${
-          paper.isOpenAccess ? "open access" : "not marked open access"
-        } in OpenAlex.`,
-        "Before reading the full text, write down what result would convince you and what result would make you skeptical. This turns passive reading into active evaluation.",
-      ],
+      paragraphs: makeExtensiveStudentSummary(paper, abstractSentences, hasAbstract),
     },
     {
       title: "Concept map before reading",
@@ -837,18 +895,7 @@ function makeFullReview(paper) {
         "Boundary: where might the conclusion stop being true?",
       ],
     },
-    {
-      title: "Theoretical background",
-      paragraphs: [
-        `Before reading, build a mental map of the field around ${concepts}. Ask what assumptions the field normally makes, what counts as evidence, and which prior methods or theories this paper probably depends on.`,
-        `A useful theory-first reading path is: define the central concepts, identify the mechanism or relationship the authors care about, then separate what the paper claims from what the data or argument actually supports.`,
-      ],
-      bullets: [
-        `Core concepts to review first: ${concepts}.`,
-        "Look for the paper's definition of its main construct, model, population, or phenomenon.",
-        "Track whether the paper is testing a theory, proposing a method, reviewing prior work, or applying an existing idea to a new setting.",
-      ],
-    },
+    makeTheoreticalBackgroundGuide(paper),
     {
       title: "Mathematics and notation guide",
       paragraphs: makeEquationGuide(paper),
@@ -872,19 +919,7 @@ function makeFullReview(paper) {
         "The conclusion is the authors' interpretation, not automatic truth.",
       ],
     },
-    {
-      title: "Full paper breakdown",
-      bullets: [
-        `Title: ${paper.title}`,
-        `Authors: ${paper.authors}`,
-        `Publication context: ${paper.source}, ${paper.date}`,
-        `Work type: ${paper.type}`,
-        `Topics: ${concepts}`,
-        `Citation count in OpenAlex: ${paper.citedByCount.toLocaleString()}`,
-        `Access signal: ${paper.isOpenAccess ? "Open access" : "Not marked open access"}`,
-        `Language: ${paper.language}`,
-      ],
-    },
+    makeFullPaperBreakdown(paper, likelyQuestion, hasAbstract),
     makeConclusionLimitationsGuide(paper),
     {
       title: "How to read each section",
