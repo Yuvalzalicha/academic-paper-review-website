@@ -3,6 +3,8 @@ const STORAGE_KEY = "papertrail-reading-list";
 const VIEW_STATE_KEY = "papertrail-view-state";
 const SEARCH_STATE_KEY = "papertrail-last-search";
 const RECOMMENDATION_STATE_KEY = "papertrail-last-recommendations";
+const SHORTS_STATE_KEY = "papertrail-last-short";
+const SESSION_KEY = "papertrail-session-id";
 const SUPABASE_FALLBACK_CONFIG = {
   url: "https://iijjknxythzulznyisdt.supabase.co",
   anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlpamprbnh5dGh6dWx6bnlpc2R0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMzQ5NDcsImV4cCI6MjA5NzYxMDk0N30.Wxh3WAlFGtl_zJjpJaZs7ZVnlSfxhnHx4XP28zSL2xY",
@@ -43,6 +45,12 @@ const els = {
   interestInput: document.querySelector("#interest-input"),
   recommendationStatus: document.querySelector("#recommendation-status"),
   recommendationResults: document.querySelector("#recommendation-results"),
+  shortsForm: document.querySelector("#shorts-form"),
+  shortsTitle: document.querySelector("#shorts-title"),
+  shortsAbstract: document.querySelector("#shorts-abstract"),
+  shortsDuration: document.querySelector("#shorts-duration"),
+  shortsStatus: document.querySelector("#shorts-status"),
+  shortsOutput: document.querySelector("#shorts-output"),
   authForm: document.querySelector("#auth-form"),
   authEmail: document.querySelector("#auth-email"),
   authPassword: document.querySelector("#auth-password"),
@@ -55,6 +63,25 @@ const els = {
   readingListCopy: document.querySelector("#reading-list-copy"),
   readingListResults: document.querySelector("#reading-list-results"),
   clearListButton: document.querySelector("#clear-list-button"),
+  adminSection: document.querySelector("#admin"),
+  adminNavLink: document.querySelector("#admin-nav-link"),
+  adminRefreshButton: document.querySelector("#admin-refresh-button"),
+  adminAccessCard: document.querySelector("#admin-access-card"),
+  adminAccessTitle: document.querySelector("#admin-access-title"),
+  adminAccessStatus: document.querySelector("#admin-access-status"),
+  adminDashboard: document.querySelector("#admin-dashboard"),
+  adminMetrics: document.querySelector("#admin-metrics"),
+  adminUsageCount: document.querySelector("#admin-usage-count"),
+  adminUsageTable: document.querySelector("#admin-usage-table"),
+  adminSubscriptionCount: document.querySelector("#admin-subscription-count"),
+  adminSubscriptionsTable: document.querySelector("#admin-subscriptions-table"),
+  adminEventsCount: document.querySelector("#admin-events-count"),
+  adminEventsTable: document.querySelector("#admin-events-table"),
+  adminCampaignCount: document.querySelector("#admin-campaign-count"),
+  adminCampaignsTable: document.querySelector("#admin-campaigns-table"),
+  campaignForm: document.querySelector("#campaign-form"),
+  campaignName: document.querySelector("#campaign-name"),
+  campaignChannel: document.querySelector("#campaign-channel"),
   cardTemplate: document.querySelector("#paper-card-template"),
   reviewModal: document.querySelector("#review-modal"),
   reviewModalTitle: document.querySelector("#review-modal-title"),
@@ -70,7 +97,20 @@ const els = {
 let readingList = loadReadingList();
 let supabaseClient = null;
 let currentUser = null;
+let currentProfile = null;
+let isAdminUser = false;
 let viewRestoreQueued = true;
+
+function getSessionId() {
+  let sessionId = localStorage.getItem(SESSION_KEY);
+  if (!sessionId) {
+    sessionId = crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    localStorage.setItem(SESSION_KEY, sessionId);
+  }
+  return sessionId;
+}
+
+const sessionId = getSessionId();
 
 function loadReadingList() {
   try {
@@ -114,6 +154,10 @@ function saveViewState(nextState) {
 
 function rememberSection(hash) {
   if (!hash) return;
+  if (!["#search", "#recommendations", "#visual-shorts", "#reading-list"].includes(hash)) {
+    saveViewState({ hash, paperId: null, reviewOpen: false, source: null });
+    return;
+  }
   saveViewState({ hash });
 }
 
@@ -126,6 +170,10 @@ function restoreSavedView() {
 
   const state = getCurrentViewState();
   const activeHash = window.location.hash || state.hash;
+  if (activeHash && !["#search", "#recommendations", "#reading-list"].includes(activeHash)) {
+    viewRestoreQueued = false;
+    return;
+  }
   const selectedCard =
     state.paperId && state.source ? document.getElementById(paperCardId(state.source, state.paperId)) : null;
 
@@ -182,6 +230,246 @@ function setAuthUiForUser(user) {
   els.readingListCopy.textContent = isSignedIn
     ? `Synced to ${user.email}.`
     : "Saved locally in this browser with no account required.";
+}
+
+function setAdminVisibility() {
+  if (!els.adminSection) return;
+
+  const canShowPanel = Boolean(currentUser);
+  els.adminSection.hidden = !canShowPanel && window.location.hash !== "#admin";
+  els.adminNavLink.hidden = !isAdminUser;
+  els.adminDashboard.hidden = !isAdminUser;
+  els.adminRefreshButton.hidden = !isAdminUser;
+  els.adminAccessCard.hidden = isAdminUser;
+
+  if (!currentUser) {
+    els.adminAccessTitle.textContent = "Admin access required";
+    els.adminAccessStatus.textContent = "Sign in with an admin account to view backend controls.";
+  } else if (!isAdminUser) {
+    els.adminAccessTitle.textContent = "No admin role";
+    els.adminAccessStatus.textContent =
+      "Your account is active, but it has not been granted the admin role in Supabase.";
+  }
+}
+
+function showAdminRoute() {
+  if (!els.adminSection || window.location.hash !== "#admin") return;
+  els.adminSection.hidden = false;
+  const scrollToAdmin = () => {
+    const headerHeight = document.querySelector(".site-header")?.offsetHeight || 0;
+    const top = els.adminSection.getBoundingClientRect().top + window.scrollY - headerHeight;
+    window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+  };
+  window.requestAnimationFrame(scrollToAdmin);
+  window.setTimeout(scrollToAdmin, 250);
+}
+
+async function trackEvent(eventName, properties = {}) {
+  if (!supabaseClient) return;
+
+  try {
+    await supabaseClient.rpc("track_app_event", {
+      event_name: eventName,
+      event_properties: {
+        ...properties,
+        path: window.location.pathname,
+        hash: window.location.hash || "#top",
+      },
+      client_session_id: sessionId,
+    });
+  } catch {
+    // Analytics must never interrupt the reading workflow.
+  }
+}
+
+async function syncUserProfile() {
+  if (!supabaseClient || !currentUser) {
+    currentProfile = null;
+    isAdminUser = false;
+    setAdminVisibility();
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("user_profiles")
+    .select("id,email,full_name,role,subscription_status")
+    .eq("id", currentUser.id)
+    .maybeSingle();
+
+  if (error) {
+    currentProfile = null;
+    isAdminUser = false;
+  } else {
+    currentProfile = data;
+    isAdminUser = data?.role === "admin";
+  }
+
+  setAdminVisibility();
+
+  if (isAdminUser || window.location.hash === "#admin") {
+    await loadAdminDashboard();
+  }
+  showAdminRoute();
+}
+
+function formatShortDate(value) {
+  if (!value) return "Not set";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not set";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function appendTableEmpty(tableBody, message, columns) {
+  const row = document.createElement("tr");
+  const cell = document.createElement("td");
+  cell.colSpan = columns;
+  cell.textContent = message;
+  row.append(cell);
+  tableBody.append(row);
+}
+
+function renderAdminMetrics(metrics = {}) {
+  const cards = [
+    ["Users", metrics.total_users || 0],
+    ["Active subscribers", metrics.active_subscriptions || 0],
+    ["Events 30 days", metrics.events_30_days || 0],
+    ["Saved papers", metrics.saved_papers || 0],
+    ["PDF guides", metrics.pdf_guides || 0],
+    ["Campaigns", metrics.campaigns || 0],
+  ];
+
+  els.adminMetrics.replaceChildren();
+  cards.forEach(([label, value]) => {
+    const card = document.createElement("article");
+    card.className = "metric-card";
+    const number = document.createElement("strong");
+    number.textContent = Number(value).toLocaleString();
+    const caption = document.createElement("span");
+    caption.textContent = label;
+    card.append(number, caption);
+    els.adminMetrics.append(card);
+  });
+}
+
+function renderAdminTableRows(tableBody, rows, columns, emptyMessage) {
+  tableBody.replaceChildren();
+  if (!rows.length) {
+    appendTableEmpty(tableBody, emptyMessage, columns.length);
+    return;
+  }
+
+  rows.forEach((rowData) => {
+    const row = document.createElement("tr");
+    columns.forEach((column) => {
+      const cell = document.createElement("td");
+      cell.textContent = column(rowData);
+      row.append(cell);
+    });
+    tableBody.append(row);
+  });
+}
+
+function renderAdminDashboard(payload = {}) {
+  const usage = payload.usage || [];
+  const subscriptions = payload.subscriptions || [];
+  const events = payload.events || [];
+  const campaigns = payload.campaigns || [];
+
+  renderAdminMetrics(payload.metrics || {});
+  els.adminUsageCount.textContent = `${usage.length} rows`;
+  els.adminSubscriptionCount.textContent = `${subscriptions.length} subscriptions`;
+  els.adminEventsCount.textContent = `${events.length} event types`;
+  els.adminCampaignCount.textContent = `${campaigns.length} campaigns`;
+
+  renderAdminTableRows(
+    els.adminUsageTable,
+    usage,
+    [
+      (row) => row.email || "Anonymous",
+      (row) => row.period || "Current",
+      (row) => Number(row.searches || 0).toLocaleString(),
+      (row) => Number(row.review_opens || 0).toLocaleString(),
+      (row) => Number(row.pdf_guides || 0).toLocaleString(),
+    ],
+    "No usage rows yet."
+  );
+
+  renderAdminTableRows(
+    els.adminSubscriptionsTable,
+    subscriptions,
+    [
+      (row) => row.email || "Unknown",
+      (row) => row.plan_name || "Free",
+      (row) => row.status || "active",
+      (row) => formatShortDate(row.current_period_end),
+    ],
+    "No subscriptions yet."
+  );
+
+  renderAdminTableRows(
+    els.adminEventsTable,
+    events,
+    [
+      (row) => row.event_name || "unknown",
+      (row) => Number(row.total || 0).toLocaleString(),
+      (row) => formatShortDate(row.last_seen_at),
+    ],
+    "No analytics events yet."
+  );
+
+  renderAdminTableRows(
+    els.adminCampaignsTable,
+    campaigns,
+    [
+      (row) => row.name || "Untitled",
+      (row) => row.channel || "email",
+      (row) => row.status || "draft",
+    ],
+    "No campaigns yet."
+  );
+}
+
+async function loadAdminDashboard() {
+  if (!supabaseClient || !currentUser) {
+    setAdminVisibility();
+    return;
+  }
+
+  els.adminAccessStatus.textContent = "Checking backend access...";
+
+  const { data, error } = await supabaseClient.rpc("get_admin_dashboard");
+  if (error) {
+    isAdminUser = false;
+    setAdminVisibility();
+    els.adminAccessStatus.textContent = error.message || "Admin dashboard is unavailable.";
+    return;
+  }
+
+  isAdminUser = true;
+  setAdminVisibility();
+  renderAdminDashboard(data || {});
+  await trackEvent("admin_dashboard_viewed");
+}
+
+async function createCampaign(event) {
+  event.preventDefault();
+  if (!supabaseClient || !isAdminUser || !els.campaignForm.reportValidity()) return;
+
+  const campaign = {
+    name: cleanText(els.campaignName.value, ""),
+    channel: els.campaignChannel.value,
+    status: "draft",
+  };
+
+  const { error } = await supabaseClient.from("marketing_campaigns").insert(campaign);
+  if (error) {
+    els.adminAccessStatus.textContent = `Could not create campaign: ${error.message}`;
+    return;
+  }
+
+  els.campaignForm.reset();
+  await trackEvent("campaign_created", campaign);
+  await loadAdminDashboard();
 }
 
 function getPaperForStorage(paper) {
@@ -263,7 +551,10 @@ async function refreshAuthSession() {
   const { data, error } = await supabaseClient.auth.getUser();
   if (error || !data.user) {
     currentUser = null;
+    currentProfile = null;
+    isAdminUser = false;
     setAuthUiForUser(null);
+    setAdminVisibility();
     setAccountStatus("Account sync is connected. Sign up or sign in to save papers across devices.", "Account ready");
     return;
   }
@@ -271,6 +562,7 @@ async function refreshAuthSession() {
   currentUser = data.user;
   setAuthUiForUser(currentUser);
   setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
+  await syncUserProfile();
   await loadCloudReadingList();
 }
 
@@ -298,8 +590,12 @@ function initAuth() {
     setAuthUiForUser(currentUser);
     if (currentUser) {
       setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
+      syncUserProfile();
       loadCloudReadingList();
     } else {
+      currentProfile = null;
+      isAdminUser = false;
+      setAdminVisibility();
       setAccountStatus("Signed out. Sign in again to sync saved papers across devices.", "Account ready");
       renderReadingList();
     }
@@ -333,8 +629,11 @@ async function handleSignUp() {
   if (currentUser) {
     setAuthUiForUser(currentUser);
     setAccountStatus(`Account created for ${currentUser.email}. Your reading list is synced.`, "Account active");
+    await trackEvent("signup_completed");
+    await syncUserProfile();
     await loadCloudReadingList();
   } else {
+    await trackEvent("signup_confirmation_required");
     setAccountStatus("Check your email to confirm your account, then sign in.", "Confirm email");
   }
 }
@@ -366,6 +665,8 @@ async function handleSignIn(event) {
   currentUser = data.user;
   setAuthUiForUser(currentUser);
   setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
+  await trackEvent("signin_completed");
+  await syncUserProfile();
   await loadCloudReadingList();
 }
 
@@ -374,7 +675,10 @@ async function handleSignOut() {
 
   await supabaseClient.auth.signOut();
   currentUser = null;
+  currentProfile = null;
+  isAdminUser = false;
   setAuthUiForUser(null);
+  setAdminVisibility();
   setAccountStatus("Signed out. Sign in again to sync saved papers across devices.", "Account ready");
 }
 
@@ -934,6 +1238,258 @@ function makeMasteryChecklist(paper) {
   };
 }
 
+function getShortSentences(paper, limit = 5) {
+  const sentences = getSentences(paper.summary, limit);
+  if (sentences.length) return sentences;
+  return [
+    `${paper.title} sits inside ${getConceptText(paper)}.`,
+    "The useful reading move is to identify the problem, the method, the evidence, and the limitation.",
+  ];
+}
+
+function makeManualShortPaper() {
+  return normalizePaperMath({
+    id: `manual-short-${Date.now()}`,
+    title: cleanText(els.shortsTitle.value, "Untitled paper"),
+    year: new Date().getFullYear(),
+    date: "Manual input",
+    type: "short script source",
+    source: "PaperTrail",
+    authors: "Manual input",
+    summary: cleanText(els.shortsAbstract.value, ""),
+    url: "#visual-shorts",
+    citedByCount: 0,
+    isOpenAccess: false,
+    language: "unknown",
+    concepts: parseSearchQuery(`${els.shortsTitle.value} ${els.shortsAbstract.value}`).allTerms.slice(0, 6),
+  });
+}
+
+function getVisualVocabulary(paper) {
+  const haystack = normalizeSearchText(`${paper.title} ${paper.summary} ${paper.concepts.join(" ")}`);
+
+  if (/(quantum|physics|operator|state|particle|wave|hamiltonian)/.test(haystack)) {
+    return {
+      object: "a glowing state vector rotating through a measurement grid",
+      tension: "two possible paths diverging, then collapsing into an observed result",
+      evidence: "small probability bars rising beside a simple state diagram",
+    };
+  }
+
+  if (/(network|graph|node|social|citation|community)/.test(haystack)) {
+    return {
+      object: "nodes connected by thin lines, with one cluster gradually lighting up",
+      tension: "a messy graph being compressed into a cleaner map",
+      evidence: "edge weights changing thickness as the claim becomes testable",
+    };
+  }
+
+  if (/(machine learning|neural|model|classification|prediction|dataset|benchmark|algorithm)/.test(haystack)) {
+    return {
+      object: "points flowing through a simple model box into an output plane",
+      tension: "overlapping data clouds separating as the method learns a boundary",
+      evidence: "a loss curve settling while example points snap into groups",
+    };
+  }
+
+  if (/(causal|treatment|policy|health|medical|clinical|population)/.test(haystack)) {
+    return {
+      object: "two matched timelines running side by side",
+      tension: "a hidden confounder sliding between cause and outcome",
+      evidence: "comparison bars narrowing into an estimated effect",
+    };
+  }
+
+  return {
+    object: "a central idea represented as a clean dot, line, and arrow system",
+    tension: "a tangled diagram simplifying into one clear relationship",
+    evidence: "three evidence tiles appearing one by one beside the main claim",
+  };
+}
+
+function makeShortPlan(paper, targetDuration = 60) {
+  const duration = Number(targetDuration) || 60;
+  const concepts = getConceptText(paper);
+  const sentences = getShortSentences(paper, 6);
+  const likelyQuestion =
+    sentences[0] || `What does this paper change about how we understand ${concepts}?`;
+  const methodSignal =
+    sentences.find((sentence) => /method|approach|model|experiment|analysis|estimate|algorithm|data/i.test(sentence)) ||
+    "The paper proposes a way to move from a messy research problem to a more testable claim.";
+  const resultSignal =
+    sentences.find((sentence) => /result|show|find|found|demonstrate|improve|suggest|reveal/i.test(sentence)) ||
+    "The key result is the evidence you should verify in the original figures, tables, proofs, or experiments.";
+  const caveatSignal =
+    sentences.find((sentence) => /limit|however|although|while|future|challenge|may|might/i.test(sentence)) ||
+    "The limitation to watch is whether the claim holds beyond the paper's assumptions, data, or setting.";
+  const visuals = getVisualVocabulary(paper);
+  const sceneLengths =
+    duration === 45
+      ? [5, 8, 10, 11, 7, 4]
+      : duration === 90
+        ? [8, 14, 18, 20, 20, 10]
+        : [6, 10, 13, 14, 12, 5];
+  let cursor = 0;
+  const timeRange = (seconds) => {
+    const start = cursor;
+    cursor += seconds;
+    return `${start}-${cursor}s`;
+  };
+
+  const scenes = [
+    {
+      label: "Hook",
+      time: timeRange(sceneLengths[0]),
+      narration: `What if the whole paper is really asking one question: ${likelyQuestion}`,
+      visual: `Start with ${visuals.object}. Fade the title into one central question, then erase every extra word except the main idea.`,
+    },
+    {
+      label: "The problem",
+      time: timeRange(sceneLengths[1]),
+      narration: `The background is ${concepts}. The paper matters because something in that area is still hard to explain, measure, predict, or prove.`,
+      visual: `${visuals.tension}. Add a small "gap" label between what researchers want to know and what current tools can show.`,
+    },
+    {
+      label: "The move",
+      time: timeRange(sceneLengths[2]),
+      narration: methodSignal,
+      visual: "Animate a three-step path: input or assumption, transformation or method, then output or claim. Keep each label short enough for a phone screen.",
+    },
+    {
+      label: "The evidence",
+      time: timeRange(sceneLengths[3]),
+      narration: resultSignal,
+      visual: `${visuals.evidence}. Show evidence as separate from interpretation by placing the measured result on one side and the authors' claim on the other.`,
+    },
+    {
+      label: "The catch",
+      time: timeRange(sceneLengths[4]),
+      narration: caveatSignal,
+      visual: "Dim the confident diagram and highlight one assumption, dataset boundary, model choice, or missing comparison as the pressure point.",
+    },
+    {
+      label: "Reading target",
+      time: timeRange(sceneLengths[5]),
+      narration: "When you read the paper, ask: what exactly changed from the first diagram to the last?",
+      visual: "Return to the opening diagram, now simplified. End on a clean paper title card and one reading question.",
+    },
+  ];
+
+  return {
+    paper,
+    duration,
+    hook: `Explain "${paper.title}" as one visual question, then rebuild the paper as problem, method, evidence, and limitation.`,
+    scenes,
+    notes: [
+      "Use an original geometric explainer style: simple shapes, transformations, labels, motion, and a calm tutorial voice.",
+      "Avoid copying any creator's branding, logo, exact color palette, character style, voice, music, or recurring visual gags.",
+      "Treat this as an educational script generated from metadata and abstract text; verify technical details in the original paper before publishing.",
+    ],
+  };
+}
+
+function shortPlanToText(plan) {
+  return [
+    `Title: ${plan.paper.title}`,
+    `Target length: ${plan.duration} seconds`,
+    "",
+    `Hook: ${plan.hook}`,
+    "",
+    ...plan.scenes.flatMap((scene) => [
+      `${scene.time} / ${scene.label}`,
+      `Narration: ${scene.narration}`,
+      `Visual: ${scene.visual}`,
+      "",
+    ]),
+    "Production notes:",
+    ...plan.notes.map((note) => `- ${note}`),
+  ].join("\n");
+}
+
+function renderShortPlan(plan) {
+  const wrapper = document.createElement("article");
+  wrapper.className = "short-plan";
+
+  const header = document.createElement("header");
+  const kicker = document.createElement("p");
+  kicker.className = "reader-kicker";
+  kicker.textContent = `${plan.duration}-second visual short`;
+  const title = document.createElement("h3");
+  renderRichText(title, plan.paper.title);
+  const hook = document.createElement("p");
+  hook.className = "short-hook";
+  hook.textContent = plan.hook;
+  header.append(kicker, title, hook);
+
+  const scenes = document.createElement("div");
+  scenes.className = "short-scenes";
+  plan.scenes.forEach((scene) => {
+    const sceneCard = document.createElement("section");
+    sceneCard.className = "short-scene";
+    const sceneTitle = document.createElement("h4");
+    sceneTitle.textContent = `${scene.time} / ${scene.label}`;
+    const narration = document.createElement("p");
+    narration.className = "short-narration";
+    narration.textContent = scene.narration;
+    const visual = document.createElement("p");
+    visual.textContent = scene.visual;
+    sceneCard.append(sceneTitle, narration, visual);
+    scenes.append(sceneCard);
+  });
+
+  const notes = document.createElement("ul");
+  notes.className = "short-notes";
+  plan.notes.forEach((noteText) => {
+    const note = document.createElement("li");
+    note.textContent = noteText;
+    notes.append(note);
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "export-actions";
+  const copyButton = document.createElement("button");
+  copyButton.className = "button small";
+  copyButton.type = "button";
+  copyButton.textContent = "Copy script";
+  copyButton.addEventListener("click", async () => {
+    const text = shortPlanToText(plan);
+    try {
+      await navigator.clipboard.writeText(text);
+      els.shortsStatus.textContent = "Copied the visual short script to your clipboard.";
+    } catch {
+      els.shortsStatus.textContent = text;
+    }
+  });
+  actions.append(copyButton);
+
+  wrapper.append(header, scenes, notes, actions);
+  els.shortsOutput.replaceChildren(wrapper);
+  saveStoredJson(SHORTS_STATE_KEY, {
+    title: plan.paper.title,
+    abstract: plan.paper.summary,
+    duration: String(plan.duration),
+    plan,
+    updatedAt: Date.now(),
+  });
+  typesetMath(els.shortsOutput);
+}
+
+function generateShortForPaper(paper, options = {}) {
+  const normalizedPaper = normalizePaperMath(paper);
+  const duration = options.duration || els.shortsDuration.value || "60";
+  if (window.location.hash !== "#visual-shorts") {
+    history.replaceState(null, "", "#visual-shorts");
+  }
+  els.shortsTitle.value = normalizedPaper.title;
+  els.shortsAbstract.value = normalizedPaper.summary;
+  els.shortsDuration.value = String(duration);
+  const plan = makeShortPlan(normalizedPaper, duration);
+  renderShortPlan(plan);
+  els.shortsStatus.textContent = `Generated a ${duration}-second visual explainer short for this paper.`;
+  saveViewState({ hash: "#visual-shorts", paperId: normalizedPaper.id, reviewOpen: false, source: "shorts" });
+  trackEvent("visual_short_generated", { paper_id: normalizedPaper.id, source: options.source || "manual" });
+}
+
 function pickSentencesByKeywords(sentences, keywords, limit = 2) {
   return sentences
     .filter((sentence) => keywords.some((keyword) => sentence.toLowerCase().includes(keyword)))
@@ -1392,9 +1948,11 @@ async function toggleSaved(paper) {
   if (isSaved(paper.id)) {
     readingList = readingList.filter((savedPaper) => savedPaper.id !== paper.id);
     await removePaperFromCloud(paper.id);
+    await trackEvent("paper_removed", { paper_id: paper.id, title: paper.title });
   } else {
     readingList = [paper, ...readingList];
     await syncPaperToCloud(paper);
+    await trackEvent("paper_saved", { paper_id: paper.id, title: paper.title });
   }
 
   saveReadingList();
@@ -1441,13 +1999,17 @@ function renderExpandableSummary(card, paper) {
 }
 
 function setModalPaperActions(paper) {
-  els.reviewModalDownload.onclick = () => openReviewPdfGuide(paper);
+  els.reviewModalDownload.onclick = () => {
+    trackEvent("pdf_guide_created", { paper_id: paper.id, delivery: "download" });
+    openReviewPdfGuide(paper);
+  };
   els.reviewModalEmailButton.onclick = () => {
     const email = cleanText(els.reviewModalEmail.value, "");
     if (!email || !els.reviewModalEmail.checkValidity()) {
       els.reviewModalEmail.reportValidity();
       return;
     }
+    trackEvent("pdf_guide_created", { paper_id: paper.id, delivery: "email" });
     openReviewPdfGuide(paper, email);
   };
 }
@@ -1473,6 +2035,7 @@ function openReviewReader(paper, options = {}) {
   makeFullReview(paper).forEach((section) => appendReviewSection(els.reviewModalContent, section));
   els.reviewModalEmail.value = "";
   setModalPaperActions(paper);
+  trackEvent("review_opened", { paper_id: paper.id, source: options.source || "papers" });
   typesetMath(els.reviewModal);
   els.reviewCloseButton.focus();
 }
@@ -1529,6 +2092,11 @@ function renderPapers(container, papers, emptyMessage, options = {}) {
       openReviewReader(paper, { hash: options.hash || "#search", source });
     });
 
+    card.querySelector(".short-button").addEventListener("click", () => {
+      generateShortForPaper(paper, { source });
+      document.querySelector("#visual-shorts")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
     const saveButton = card.querySelector(".save-button");
     saveButton.dataset.paperId = paper.id;
     saveButton.addEventListener("click", () => toggleSaved(paper));
@@ -1583,6 +2151,21 @@ function restoreDiscoveryViews() {
       { hash: "#recommendations", source: "recommendations" }
     );
   }
+
+  const lastShort = loadStoredJson(SHORTS_STATE_KEY);
+  if (lastShort?.plan) {
+    els.shortsTitle.value = lastShort.title || "";
+    els.shortsAbstract.value = lastShort.abstract || "";
+    els.shortsDuration.value = lastShort.duration || "60";
+    renderShortPlan(lastShort.plan);
+    els.shortsStatus.textContent = "Restored your last generated visual short.";
+  }
+}
+
+function handleShorts(event) {
+  event.preventDefault();
+  if (!els.shortsForm.reportValidity()) return;
+  generateShortForPaper(makeManualShortPaper(), { source: "manual" });
 }
 
 async function handleSearch(event) {
@@ -1611,12 +2194,20 @@ async function handleSearch(event) {
       papers: ranked.papers,
       updatedAt: Date.now(),
     });
+    await trackEvent("search_completed", {
+      query,
+      precision,
+      result_count: ranked.papers.length,
+      candidate_count: ranked.candidateCount,
+      used_fallback: ranked.usedFallback,
+    });
     saveViewState({ hash: "#search", source: "search", paperId: null, reviewOpen: false });
     renderPapers(els.searchResults, ranked.papers, "No matching papers found. Try a broader topic.", {
       hash: "#search",
       source: "search",
     });
   } catch (error) {
+    await trackEvent("search_failed", { query, precision });
     els.searchStatus.textContent =
       "PaperTrail could not reach OpenAlex. Check your connection and try again.";
   }
@@ -1644,6 +2235,11 @@ async function handleRecommendations(event) {
       papers: ranked.papers,
       updatedAt: Date.now(),
     });
+    await trackEvent("recommendations_completed", {
+      interest_length: interests.length,
+      result_count: ranked.papers.length,
+      candidate_count: ranked.candidateCount,
+    });
     saveViewState({
       hash: "#recommendations",
       source: "recommendations",
@@ -1657,6 +2253,7 @@ async function handleRecommendations(event) {
       { hash: "#recommendations", source: "recommendations" }
     );
   } catch (error) {
+    await trackEvent("recommendations_failed", { interest_length: interests.length });
     els.recommendationStatus.textContent =
       "Recommendations are unavailable because OpenAlex could not be reached.";
   }
@@ -1664,6 +2261,7 @@ async function handleRecommendations(event) {
 
 els.searchForm.addEventListener("submit", handleSearch);
 els.interestForm.addEventListener("submit", handleRecommendations);
+els.shortsForm.addEventListener("submit", handleShorts);
 els.authForm.addEventListener("submit", handleSignIn);
 els.signUpButton.addEventListener("click", handleSignUp);
 els.signOutButton.addEventListener("click", handleSignOut);
@@ -1677,13 +2275,27 @@ window.addEventListener("keydown", (event) => {
 els.clearListButton.addEventListener("click", async () => {
   readingList = [];
   await clearCloudReadingList();
+  await trackEvent("reading_list_cleared");
   saveReadingList();
   refreshSaveButtons();
 });
-window.addEventListener("hashchange", () => rememberSection(window.location.hash));
+els.adminRefreshButton.addEventListener("click", loadAdminDashboard);
+els.campaignForm.addEventListener("submit", createCampaign);
+window.addEventListener("hashchange", () => {
+  rememberSection(window.location.hash);
+  if (window.location.hash === "#admin") {
+    showAdminRoute();
+    if (currentUser) {
+      loadAdminDashboard();
+    } else {
+      setAdminVisibility();
+    }
+  }
+});
 
 rememberSection(window.location.hash || getCurrentViewState().hash || "#top");
 restoreDiscoveryViews();
 renderReadingList();
 restoreSavedView();
 initAuth();
+showAdminRoute();

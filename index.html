@@ -10,7 +10,7 @@
     >
     <link rel="preconnect" href="https://api.openalex.org">
     <link rel="preload" as="image" href="assets/quantum-hero.png">
-    <link rel="stylesheet" href="styles.css?v=20260622-purpose">
+    <link rel="stylesheet" href="styles.css?v=20260622-visual-shorts">
   </head>
   <body>
     <header class="site-header">
@@ -22,8 +22,10 @@
         <div class="nav-links">
           <a href="#search">Search</a>
           <a href="#recommendations">Recommendations</a>
+          <a href="#visual-shorts">Visual shorts</a>
           <a href="#account">Account</a>
           <a href="#reading-list">Reading list</a>
+          <a href="#admin" id="admin-nav-link" hidden>Admin</a>
         </div>
       </nav>
     </header>
@@ -139,6 +141,49 @@
         <div class="results-grid" id="recommendation-results"></div>
       </section>
 
+      <section id="visual-shorts" class="section surface" aria-labelledby="visual-shorts-title">
+        <div class="section-heading">
+          <h2 id="visual-shorts-title">Visual explainer shorts</h2>
+          <p>
+            Turn a paper into a short-form storyboard with narration, visual beats, and production
+            notes for a clean geometric explainer style.
+          </p>
+        </div>
+        <div class="shorts-workbench">
+          <form class="shorts-panel" id="shorts-form">
+            <label for="shorts-title">Paper title</label>
+            <input
+              id="shorts-title"
+              name="title"
+              type="text"
+              placeholder="Paste a title or use the Visual short button on a paper"
+              required
+            >
+            <label for="shorts-abstract">Abstract, summary, or notes</label>
+            <textarea
+              id="shorts-abstract"
+              name="abstract"
+              rows="6"
+              placeholder="Paste the abstract, method notes, or main claim you want explained"
+              required
+            ></textarea>
+            <label for="shorts-duration">Target length</label>
+            <select id="shorts-duration" name="duration">
+              <option value="45">45 seconds</option>
+              <option value="60" selected>60 seconds</option>
+              <option value="90">90 seconds</option>
+            </select>
+            <button class="button primary" type="submit">Generate visual short</button>
+          </form>
+          <div class="shorts-panel short-output" id="shorts-output" aria-live="polite">
+            <p class="empty-state">
+              Generate a short to see the hook, narration, scene-by-scene visuals, and copy-ready script.
+            </p>
+          </div>
+        </div>
+        <div class="status" id="shorts-status" role="status" aria-live="polite"></div>
+      </section>
+
       <section id="account" class="section surface" aria-labelledby="account-title">
         <div class="section-heading split-heading">
           <div>
@@ -194,10 +239,122 @@
         </div>
         <div class="results-grid" id="reading-list-results"></div>
       </section>
+
+      <section id="admin" class="section admin-section" aria-labelledby="admin-title" hidden>
+        <div class="section-heading split-heading">
+          <div>
+            <h2 id="admin-title">Backend panel</h2>
+            <p id="admin-copy">Manage subscription health, user usage, analytics, and campaigns.</p>
+          </div>
+          <button class="button ghost" id="admin-refresh-button" type="button">Refresh</button>
+        </div>
+
+        <div class="admin-access-card" id="admin-access-card">
+          <strong id="admin-access-title">Admin access required</strong>
+          <p id="admin-access-status">Sign in with an admin account to view backend controls.</p>
+        </div>
+
+        <div class="admin-dashboard" id="admin-dashboard" hidden>
+          <div class="admin-metrics" id="admin-metrics"></div>
+
+          <div class="admin-grid">
+            <article class="admin-panel">
+              <header>
+                <h3>Usage engine</h3>
+                <span id="admin-usage-count">0 rows</span>
+              </header>
+              <div class="admin-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Period</th>
+                      <th>Searches</th>
+                      <th>Reviews</th>
+                      <th>PDFs</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-usage-table"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="admin-panel">
+              <header>
+                <h3>Subscriptions</h3>
+                <span id="admin-subscription-count">0 plans</span>
+              </header>
+              <div class="admin-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Plan</th>
+                      <th>Status</th>
+                      <th>Renews</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-subscriptions-table"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+
+          <div class="admin-grid">
+            <article class="admin-panel">
+              <header>
+                <h3>Analytics</h3>
+                <span id="admin-events-count">0 events</span>
+              </header>
+              <div class="admin-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Event</th>
+                      <th>Total</th>
+                      <th>Latest</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-events-table"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="admin-panel">
+              <header>
+                <h3>Marketing</h3>
+                <span id="admin-campaign-count">0 campaigns</span>
+              </header>
+              <form class="campaign-form" id="campaign-form">
+                <input id="campaign-name" name="name" type="text" placeholder="Campaign name" required>
+                <select id="campaign-channel" name="channel" required>
+                  <option value="email">Email</option>
+                  <option value="social">Social</option>
+                  <option value="content">Content</option>
+                  <option value="partner">Partner</option>
+                </select>
+                <button class="button primary small" type="submit">Create</button>
+              </form>
+              <div class="admin-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Channel</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-campaigns-table"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="site-footer">
-      <p>Powered by the OpenAlex API. Saved papers stay on this device.</p>
+      <p>Powered by the OpenAlex API with optional Supabase account sync and backend analytics.</p>
     </footer>
 
     <template id="paper-card-template">
@@ -220,6 +377,7 @@
         </div>
         <div class="card-actions">
           <a class="button small paper-link" target="_blank" rel="noreferrer">Open paper</a>
+          <button class="button small short-button" type="button">Visual short</button>
           <button class="button small save-button" type="button"></button>
         </div>
       </article>
@@ -274,6 +432,6 @@
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=20260621"></script>
-    <script src="script.js?v=20260622-purpose" defer></script>
+    <script src="script.js?v=20260622-visual-shorts" defer></script>
   </body>
 </html>
