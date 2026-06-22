@@ -382,13 +382,93 @@ function cleanText(value, fallback = "Not listed") {
   return value.replace(/\s+/g, " ").trim() || fallback;
 }
 
+function decodeMathEntities(value) {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function mathOperatorToLatex(operator) {
+  const normalized = decodeMathEntities(operator).trim();
+  const operators = {
+    "(": "(",
+    ")": ")",
+    "[": "[",
+    "]": "]",
+    "{": "\\{",
+    "}": "\\}",
+    "+": "+",
+    "-": "-",
+    "=": "=",
+    "<": "<",
+    ">": ">",
+    "≤": "\\leq",
+    "≥": "\\geq",
+    "×": "\\times",
+    "⋅": "\\cdot",
+    "→": "\\to",
+    "∈": "\\in",
+  };
+  return operators[normalized] || normalized;
+}
+
+function mathIdentifierToLatex(content, attributes = "") {
+  const identifier = decodeMathEntities(content).trim();
+  if (!identifier) return "";
+  if (/mathvariant=["']double-struck["']/.test(attributes)) {
+    return identifier
+      .split("")
+      .map((character) => /[A-Za-z]/.test(character) ? `\\mathbb{${character}}` : character)
+      .join("");
+  }
+  if (/mathvariant=["']bold["']/.test(attributes)) {
+    return `\\mathbf{${identifier}}`;
+  }
+  return identifier;
+}
+
+function mathMlToLatex(mathMarkup) {
+  let latex = decodeMathEntities(mathMarkup)
+    .replace(/<[^>]*:?mi\b([^>]*)>(.*?)<\/[^>]*:?mi>/gi, (_match, attributes, content) =>
+      mathIdentifierToLatex(content, attributes)
+    )
+    .replace(/<[^>]*:?mn\b[^>]*>(.*?)<\/[^>]*:?mn>/gi, (_match, content) => decodeMathEntities(content).trim())
+    .replace(/<[^>]*:?mo\b[^>]*>(.*?)<\/[^>]*:?mo>/gi, (_match, content) => mathOperatorToLatex(content))
+    .replace(/<[^>]*:?mtext\b[^>]*>(.*?)<\/[^>]*:?mtext>/gi, (_match, content) => `\\text{${decodeMathEntities(content).trim()}}`)
+    .replace(/<[^>]*:?msup\b[^>]*>\s*([^<]+)\s*([^<]+)\s*<\/[^>]*:?msup>/gi, "$1^{$2}")
+    .replace(/<[^>]*:?msub\b[^>]*>\s*([^<]+)\s*([^<]+)\s*<\/[^>]*:?msub>/gi, "$1_{$2}")
+    .replace(/<[^>]*:?mfrac\b[^>]*>\s*([^<]+)\s*([^<]+)\s*<\/[^>]*:?mfrac>/gi, "\\frac{$1}{$2}")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  latex = latex
+    .replace(/\s*([()=+\-<>])\s*/g, "$1")
+    .replace(/\\mathbb\{([A-Za-z])\}\\mathbb\{([A-Za-z])\}/g, "\\mathbb{$1$2}")
+    .replace(/([A-Za-z0-9}])\\mathbb/g, "$1 \\mathbb");
+
+  return latex ? `\\(${latex}\\)` : "";
+}
+
+function convertEmbeddedMathMarkup(value) {
+  if (!value || typeof value !== "string") return "";
+  return decodeMathEntities(value).replace(/<[^>\s:]*:?math\b[\s\S]*?<\/[^>\s:]*:?math>/gi, (mathMarkup) => {
+    const latex = mathMlToLatex(mathMarkup);
+    return latex ? ` ${latex} ` : " ";
+  });
+}
+
 function normalizeMathText(value) {
-  return cleanText(value, "")
+  return cleanText(convertEmbeddedMathMarkup(value), "")
     .replace(/\\\(/g, "\\(")
     .replace(/\\\)/g, "\\)")
     .replace(/\\\[/g, "\\[")
     .replace(/\\\]/g, "\\]")
     .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/\\\)\s+-/g, "\\)-")
     .replace(/([([{])\s+/g, "$1")
     .replace(/\s+([)\]}])/g, "$1")
     .replace(/\b([A-Za-z])\s+\^\s*([0-9A-Za-z+-]+)/g, "$1^$2")
