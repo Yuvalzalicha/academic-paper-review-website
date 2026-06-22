@@ -1,5 +1,8 @@
 const OPENALEX_BASE_URL = "https://api.openalex.org/works";
 const STORAGE_KEY = "papertrail-reading-list";
+const VIEW_STATE_KEY = "papertrail-view-state";
+const SEARCH_STATE_KEY = "papertrail-last-search";
+const RECOMMENDATION_STATE_KEY = "papertrail-last-recommendations";
 const SUPABASE_FALLBACK_CONFIG = {
   url: "https://iijjknxythzulznyisdt.supabase.co",
   anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlpamprbnh5dGh6dWx6bnlpc2R0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMzQ5NDcsImV4cCI6MjA5NzYxMDk0N30.Wxh3WAlFGtl_zJjpJaZs7ZVnlSfxhnHx4XP28zSL2xY",
@@ -58,6 +61,7 @@ const els = {
 let readingList = loadReadingList();
 let supabaseClient = null;
 let currentUser = null;
+let viewRestoreQueued = true;
 
 function loadReadingList() {
   try {
@@ -70,6 +74,75 @@ function loadReadingList() {
 function saveReadingList() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(readingList));
   renderReadingList();
+}
+
+function loadStoredJson(key, fallback = null) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveStoredJson(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getCurrentViewState() {
+  return loadStoredJson(VIEW_STATE_KEY, {});
+}
+
+function saveViewState(nextState) {
+  const currentState = getCurrentViewState();
+  saveStoredJson(VIEW_STATE_KEY, {
+    ...currentState,
+    ...nextState,
+    hash: nextState.hash || window.location.hash || currentState.hash || "#top",
+    updatedAt: Date.now(),
+  });
+}
+
+function rememberSection(hash) {
+  if (!hash) return;
+  saveViewState({ hash });
+}
+
+function paperCardId(source, paperId) {
+  return `paper-${source}-${encodeURIComponent(paperId).replace(/%/g, "")}`;
+}
+
+function restoreSavedView() {
+  if (!viewRestoreQueued) return;
+
+  const state = getCurrentViewState();
+  const activeHash = window.location.hash || state.hash;
+  const selectedCard =
+    state.paperId && state.source ? document.getElementById(paperCardId(state.source, state.paperId)) : null;
+
+  if (selectedCard) {
+    const details = selectedCard.querySelector(".full-review");
+    if (details && state.reviewOpen) {
+      details.open = true;
+    }
+    selectedCard.scrollIntoView({ behavior: "auto", block: "start" });
+    viewRestoreQueued = false;
+    return;
+  }
+
+  if (state.paperId) return;
+
+  if (activeHash) {
+    let target = null;
+    try {
+      target = document.querySelector(activeHash);
+    } catch {
+      target = null;
+    }
+    if (target) {
+      target.scrollIntoView({ behavior: "auto", block: "start" });
+      viewRestoreQueued = false;
+    }
+  }
 }
 
 function isSupabaseConfigured() {
@@ -1173,8 +1246,9 @@ function refreshSaveButtons() {
   });
 }
 
-function renderPapers(container, papers, emptyMessage) {
+function renderPapers(container, papers, emptyMessage, options = {}) {
   container.replaceChildren();
+  const source = options.source || "papers";
 
   if (!papers.length) {
     const empty = document.createElement("p");
@@ -1189,6 +1263,7 @@ function renderPapers(container, papers, emptyMessage) {
     const summary =
       paper.summary.length > 360 ? `${paper.summary.slice(0, 357).trim()}...` : paper.summary;
 
+    card.id = paperCardId(source, paper.id);
     card.querySelector(".year").textContent = paper.year;
     card.querySelector(".source").textContent = paper.source;
     renderRichText(card.querySelector("h3"), paper.title);
@@ -1216,6 +1291,21 @@ function renderPapers(container, papers, emptyMessage) {
     const reviewContent = card.querySelector(".review-content");
     makeFullReview(paper).forEach((section) => appendReviewSection(reviewContent, section));
 
+    const fullReview = card.querySelector(".full-review");
+    fullReview.addEventListener("toggle", () => {
+      if (!fullReview.open) return;
+      const hash = options.hash || window.location.hash || "#search";
+      if (window.location.hash !== hash) {
+        history.replaceState(null, "", hash);
+      }
+      saveViewState({
+        hash,
+        paperId: paper.id,
+        reviewOpen: true,
+        source,
+      });
+    });
+
     const reviewEmailInput = card.querySelector(".review-email-input");
     card.querySelector(".review-download-button").addEventListener("click", () => {
       openReviewPdfGuide(paper);
@@ -1239,15 +1329,47 @@ function renderPapers(container, papers, emptyMessage) {
 
   refreshSaveButtons();
   typesetMath(container);
+  restoreSavedView();
 }
 
 function renderReadingList() {
   renderPapers(
     els.readingListResults,
     readingList,
-    "Your reading list is empty. Save papers from search or recommendations to see them here."
+    "Your reading list is empty. Save papers from search or recommendations to see them here.",
+    { hash: "#reading-list", source: "reading-list" }
   );
   els.clearListButton.disabled = readingList.length === 0;
+}
+
+function restoreDiscoveryViews() {
+  const lastSearch = loadStoredJson(SEARCH_STATE_KEY);
+  if (lastSearch?.papers?.length) {
+    els.searchInput.value = lastSearch.query || "";
+    const precisionInput = els.searchForm.querySelector(`[name="precision"][value="${lastSearch.precision}"]`);
+    if (precisionInput) {
+      precisionInput.checked = true;
+    }
+    els.searchStatus.textContent =
+      lastSearch.status || `Restored your last search for "${lastSearch.query}".`;
+    renderPapers(els.searchResults, lastSearch.papers, "No matching papers found. Try a broader topic.", {
+      hash: "#search",
+      source: "search",
+    });
+  }
+
+  const lastRecommendations = loadStoredJson(RECOMMENDATION_STATE_KEY);
+  if (lastRecommendations?.papers?.length) {
+    els.interestInput.value = lastRecommendations.interests || "";
+    els.recommendationStatus.textContent =
+      lastRecommendations.status || "Restored your last recommendations.";
+    renderPapers(
+      els.recommendationResults,
+      lastRecommendations.papers,
+      "No recommendations found. Try a more specific mix of methods and topics.",
+      { hash: "#recommendations", source: "recommendations" }
+    );
+  }
 }
 
 async function handleSearch(event) {
@@ -1268,7 +1390,19 @@ async function handleSearch(event) {
         ? `No strict ${precision} matches found in ${ranked.candidateCount} OpenAlex candidates, so showing the closest matches for "${query}".`
         : `Showing ${ranked.papers.length} precise matches from ${ranked.candidateCount} OpenAlex candidates for "${query}".`
       : `No papers found for "${query}".`;
-    renderPapers(els.searchResults, ranked.papers, "No matching papers found. Try a broader topic.");
+    const status = els.searchStatus.textContent;
+    saveStoredJson(SEARCH_STATE_KEY, {
+      query,
+      precision,
+      status,
+      papers: ranked.papers,
+      updatedAt: Date.now(),
+    });
+    saveViewState({ hash: "#search", source: "search", paperId: null, reviewOpen: false });
+    renderPapers(els.searchResults, ranked.papers, "No matching papers found. Try a broader topic.", {
+      hash: "#search",
+      source: "search",
+    });
   } catch (error) {
     els.searchStatus.textContent =
       "PaperTrail could not reach OpenAlex. Check your connection and try again.";
@@ -1290,10 +1424,24 @@ async function handleRecommendations(event) {
     els.recommendationStatus.textContent = ranked.papers.length
       ? `Recommended ${ranked.papers.length} papers from ${ranked.candidateCount} OpenAlex candidates.`
       : "No recommendations found yet. Try naming a field, method, and application area.";
+    const status = els.recommendationStatus.textContent;
+    saveStoredJson(RECOMMENDATION_STATE_KEY, {
+      interests,
+      status,
+      papers: ranked.papers,
+      updatedAt: Date.now(),
+    });
+    saveViewState({
+      hash: "#recommendations",
+      source: "recommendations",
+      paperId: null,
+      reviewOpen: false,
+    });
     renderPapers(
       els.recommendationResults,
       ranked.papers,
-      "No recommendations found. Try a more specific mix of methods and topics."
+      "No recommendations found. Try a more specific mix of methods and topics.",
+      { hash: "#recommendations", source: "recommendations" }
     );
   } catch (error) {
     els.recommendationStatus.textContent =
@@ -1312,6 +1460,10 @@ els.clearListButton.addEventListener("click", async () => {
   saveReadingList();
   refreshSaveButtons();
 });
+window.addEventListener("hashchange", () => rememberSection(window.location.hash));
 
+rememberSection(window.location.hash || getCurrentViewState().hash || "#top");
+restoreDiscoveryViews();
 renderReadingList();
+restoreSavedView();
 initAuth();
