@@ -1248,7 +1248,7 @@ function refreshSaveButtons() {
 
 function renderExpandableSummary(card, paper) {
   const summaryElement = card.querySelector(".summary");
-  const toggleButton = card.querySelector(".summary-toggle");
+  const templateToggle = card.querySelector(".summary-toggle");
   const previewLimit = 360;
   const hasLongSummary = paper.summary.length > previewLimit;
   const preview = hasLongSummary ? `${paper.summary.slice(0, previewLimit).trim()}...` : paper.summary;
@@ -1257,13 +1257,22 @@ function renderExpandableSummary(card, paper) {
 
   if (!hasLongSummary) return;
 
-  toggleButton.hidden = false;
+  const toggleButton = templateToggle || document.createElement("button");
+  toggleButton.className = "summary-toggle";
+  toggleButton.type = "button";
   toggleButton.setAttribute("aria-expanded", "false");
+  toggleButton.hidden = false;
+  toggleButton.textContent = "Read full abstract";
+  summaryElement.append(" ");
+  summaryElement.append(toggleButton);
+
   toggleButton.addEventListener("click", () => {
     const isExpanded = toggleButton.getAttribute("aria-expanded") === "true";
     toggleButton.setAttribute("aria-expanded", String(!isExpanded));
-    toggleButton.textContent = isExpanded ? "Show full abstract" : "Show shorter abstract";
     renderRichText(summaryElement, isExpanded ? preview : paper.summary);
+    toggleButton.textContent = isExpanded ? "Read full abstract" : "Show shorter abstract";
+    summaryElement.append(" ");
+    summaryElement.append(toggleButton);
     typesetMath(summaryElement);
   });
 }

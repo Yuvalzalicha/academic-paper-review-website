@@ -549,16 +549,20 @@ mjx-container {
 }
 
 .summary-toggle {
-  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
   border: 1px solid rgba(88, 230, 255, 0.36);
   border-radius: 8px;
-  padding: 7px 10px;
+  margin-top: 8px;
+  padding: 6px 9px;
   color: #bff7ff;
   background: rgba(88, 230, 255, 0.08);
   font: inherit;
   font-size: 0.82rem;
   font-weight: 800;
   cursor: pointer;
+  vertical-align: baseline;
   transition:
     background 160ms ease,
     border-color 160ms ease,
