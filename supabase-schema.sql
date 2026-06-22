@@ -45,9 +45,9 @@ insert into public.subscription_plans (
   features
 )
 values
-  ('free', 'Free', 0, 'free', 50, 20, 5, '["Cloud reading list", "Basic recommendations", "Limited PDF guides"]'::jsonb),
-  ('student', 'Student', 900, 'month', 500, 200, 50, '["Higher usage limits", "Review history", "Priority PDF guides"]'::jsonb),
-  ('lab', 'Lab', 2900, 'month', 2500, 1000, 250, '["Team usage", "Admin analytics", "Campaign attribution"]'::jsonb)
+  ('free', 'Free', 0, 'free', 50, 20, 5, '["Cloud research library", "Basic recommendations", "Limited PDF dossiers"]'::jsonb),
+  ('professional', 'Professional', 1900, 'month', 750, 300, 75, '["Higher usage limits", "Dossier history", "Priority PDF dossiers"]'::jsonb),
+  ('lab', 'Lab', 4900, 'month', 3500, 1400, 350, '["Team usage", "Admin analytics", "Campaign attribution"]'::jsonb)
 on conflict (id) do update set
   name = excluded.name,
   price_cents = excluded.price_cents,

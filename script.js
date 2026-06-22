@@ -225,8 +225,8 @@ function setAuthUiForUser(user) {
   els.authForm.hidden = isSignedIn;
   els.signOutButton.hidden = !isSignedIn;
   els.accountCopy.textContent = isSignedIn
-    ? "Your research library is synced to your free PaperTrail account."
-    : "Subscribe for free to save papers to your account and return to them later.";
+    ? "Your research library is synced to your PaperTrail workspace."
+    : "Create a workspace account to sync your research library, dossiers, and usage across sessions.";
   els.readingListCopy.textContent = isSignedIn
     ? `Synced to ${user.email}.`
     : "Saved locally in this browser with no account required.";
@@ -611,7 +611,7 @@ async function handleSignUp() {
   if (!els.authForm.reportValidity()) return;
 
   els.signUpButton.disabled = true;
-  setAccountStatus("Creating your free account...", "Working");
+  setAccountStatus("Creating your PaperTrail workspace...", "Working");
 
   const { data, error } = await supabaseClient.auth.signUp({
     email: els.authEmail.value,
@@ -1125,7 +1125,7 @@ function makeStudentPreview(paper) {
 
   return [
     `Intelligence brief: ${firstClaim}`,
-    `Why it matters: the paper connects to ${concepts}, so the professional task is to understand the field context before judging contribution and evidence.`,
+    `Why it matters: the paper connects to ${concepts}, so the professional task is to establish field context before judging contribution and evidence.`,
     `Triage target: ${secondClaim}`,
   ].join(" ");
 }
@@ -1148,7 +1148,7 @@ function makeExtensiveStudentSummary(paper, abstractSentences, hasAbstract) {
     `${getCitationSignal(paper)} It was published in ${paper.year} through ${paper.source}, and OpenAlex marks the access status as ${
       paper.isOpenAccess ? "open access" : "not open access or not clearly open"
     }. Citation count is not proof of correctness, but it tells you whether the paper has entered a broader scholarly conversation.`,
-    "Before reading the full text, write a one-sentence prediction of the paper's contribution. After reading, compare your prediction to the authors' conclusion. The difference between those two sentences is where real understanding begins.",
+    "Before reading the full text, write a one-sentence hypothesis about the paper's contribution. After reading, compare that hypothesis to the authors' conclusion. The difference between those two sentences is the start of the critique.",
   ];
 }
 
@@ -1157,7 +1157,7 @@ function makeEquationGuide(paper) {
   return [
     `Mathematics in this paper should be read as a compressed language for claims about ${concepts}. Do not start by manipulating symbols. First label every object, then ask what role the equation plays in the argument: definition, model, assumption, objective, constraint, result, or evaluation metric.`,
     "A common structure in technical papers is a model mapping inputs to outputs: \\(\\hat{y}=f_\\theta(x)\\). In words: the model \\(f\\), controlled by parameters \\(\\theta\\), takes an input \\(x\\) and produces a prediction \\(\\hat{y}\\). If the paper is not machine-learning oriented, the same idea still helps: identify the object being transformed and the rule doing the transformation.",
-    "If the paper optimizes something, expect an objective such as \\[\\mathcal{L}(\\theta)=\\frac{1}{n}\\sum_{i=1}^{n}\\ell\\big(f_\\theta(x_i),y_i\\big).\\] Read it as: choose parameters \\(\\theta\\) that make the average error or cost small across examples. Your job is to understand what counts as error, why that objective is appropriate, and what it ignores.",
+    "If the paper optimizes something, expect an objective such as \\[\\mathcal{L}(\\theta)=\\frac{1}{n}\\sum_{i=1}^{n}\\ell\\big(f_\\theta(x_i),y_i\\big).\\] Read it as: choose parameters \\(\\theta\\) that make the average error or cost small across examples. The audit question is what counts as error, why that objective is appropriate, and what it ignores.",
     "If the paper is probabilistic or statistical, look for expressions like \\(p(y\\mid x)\\), \\(\\mathbb{E}[X]\\), confidence intervals, likelihoods, priors, or estimators. Translate them into plain English: what is uncertain, what is conditioned on what, and what evidence changes the belief?",
     "If the paper is quantum or physics-related, notation may include states, operators, and expectation values, for example \\(|\\psi\\rangle\\), \\(U(\\theta)\\), or \\[\\langle O\\rangle=\\langle\\psi|U(\\theta)^\\dagger O U(\\theta)|\\psi\\rangle.\\] Read this as: prepare a state, transform it, measure an observable, and interpret the resulting quantity.",
     "Build a symbol table as you read. A useful table has columns for symbol, plain-English meaning, units or type, where it is defined, and why it matters. This prevents the common trap of recognizing the equation visually but not knowing what claim it supports.",
@@ -1169,7 +1169,7 @@ function makeTheoreticalBackgroundGuide(paper) {
   return {
     title: "Theoretical background",
     paragraphs: [
-      `Before reading, build a mental model of the field around ${concepts}. Theoretical background is not just "older papers"; it is the set of assumptions, definitions, standard problems, and accepted methods that make the current paper understandable.`,
+      `Before deep evaluation, reconstruct the field around ${concepts}. Theoretical background is not just "older papers"; it is the set of assumptions, definitions, standard problems, and accepted methods that determine how the current paper should be judged.`,
       "Start by identifying the object of study. Is the paper mainly about a phenomenon, a dataset, a mathematical model, an algorithm, a physical system, a population, a measurement procedure, or a conceptual debate? Once you know the object, the rest of the paper becomes easier to organize.",
       "Next, identify the paper's theoretical tension. Most academic papers exist because something does not fully work yet: a theory fails in some setting, a model has a weakness, an empirical result is unexplained, a method is inefficient, or two parts of the literature do not fit together neatly.",
       "Then separate background from contribution. Background explains the stage; contribution changes something on that stage. When you read the introduction and related work, mark every sentence as either context, gap, tool, assumption, or claim.",
@@ -1177,7 +1177,7 @@ function makeTheoreticalBackgroundGuide(paper) {
     ],
     bullets: [
       `Core concepts to review first: ${concepts}.`,
-      "Definitions: write down how the paper defines its central terms, not how you personally understand them.",
+      "Definitions: capture how the paper defines its central terms, not how the terms are used casually elsewhere.",
       "Assumptions: list what the authors must assume for their method or argument to work.",
       "Prior work: identify which earlier ideas the paper depends on and which earlier ideas it criticizes or improves.",
       "Mechanism: state the proposed reason the result should happen, not just the result itself.",
@@ -1251,7 +1251,7 @@ function makeResearchDecisionGuide(paper) {
     ],
     bullets: [
       "Cite: cite it if the paper gives a clear definition, method, dataset, result, or theoretical frame that your own work directly depends on.",
-      "Teach: teach it if the paper cleanly demonstrates a concept, method, or controversy that would help others understand the field.",
+      "Brief: brief it if the paper cleanly demonstrates a concept, method, or controversy that would help a team make sense of the field.",
       "Replicate: replicate it if the claim is important, surprising, under-tested, or depends on data, assumptions, or implementation choices that need verification.",
       "Challenge: challenge it if the conclusion overreaches the evidence, ignores plausible alternatives, or depends on fragile assumptions.",
       "Build on: build on it if the method or theory opens a clear extension, new benchmark, broader domain, or stronger experimental design.",
@@ -1584,7 +1584,7 @@ function makeFullReview(paper) {
     {
       title: "Concept and contribution map",
       paragraphs: [
-        `Treat ${concepts} as the concept map for your first pass. Your job is to see which concept is the main object of study, which concepts are tools, and which concepts are background context.`,
+        `Treat ${concepts} as the concept map for the dossier. The objective is to identify which concept is the main object of study, which concepts are tools, and which concepts are background context.`,
       ],
       bullets: [
         "Main object: what phenomenon, model, population, material, or problem is being studied?",
@@ -1608,7 +1608,7 @@ function makeFullReview(paper) {
       title: "Plain-language argument reconstruction",
       paragraphs: [
         `In plain language, this paper is about a specific problem inside ${concepts}. Read it as if the authors are trying to answer: "What is happening here, how can we study it, and why should anyone believe the answer?"`,
-        "Do not try to understand every technical term on the first pass. First find the problem, the proposed approach, the evidence, and the takeaway. The details become easier once those four pieces are visible.",
+        "Do not let technical density obscure the core audit. First isolate the problem, proposed approach, evidence, and takeaway; then evaluate the details against those four anchors.",
       ],
       bullets: [
         `The paper's likely starting question: ${likelyQuestion}`,
