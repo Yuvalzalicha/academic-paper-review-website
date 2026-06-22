@@ -6,11 +6,11 @@
     <title>PaperTrail | Academic Paper Review</title>
     <meta
       name="description"
-      content="Search academic papers, discover beginner-friendly recommendations, and save a local reading list."
+      content="Search academic papers and build an end-to-end understanding guide before reading the original paper."
     >
     <link rel="preconnect" href="https://api.openalex.org">
     <link rel="preload" as="image" href="assets/quantum-hero.png">
-    <link rel="stylesheet" href="styles.css?v=20260622-review-reader">
+    <link rel="stylesheet" href="styles.css?v=20260622-purpose">
   </head>
   <body>
     <header class="site-header">
@@ -31,10 +31,11 @@
     <main id="top">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <h1 id="hero-title">Find papers worth reading, then understand them faster.</h1>
+          <h1 id="hero-title">Understand the paper before the paper.</h1>
           <p>
-            PaperTrail searches OpenAlex through a quantum-inspired discovery lens, turns metadata
-            into beginner-friendly review notes, and keeps your saved papers close.
+            PaperTrail is built to turn an intimidating academic paper into a complete pre-reading
+            map: the problem, theory, notation, method, evidence, limitations, and future work,
+            so the original paper feels familiar before you open it.
           </p>
           <div class="hero-actions">
             <a class="button primary" href="#search">Search papers</a>
@@ -42,12 +43,41 @@
           </div>
           <div class="hero-stats" aria-label="PaperTrail capabilities">
             <span>Precise OpenAlex search</span>
-            <span>LaTeX-style review PDFs</span>
-            <span>Cloud reading lists</span>
+            <span>End-to-end paper guides</span>
+            <span>Readable LaTeX math</span>
           </div>
         </div>
         <div class="hero-visual" aria-hidden="true">
           <img src="assets/quantum-hero.png" alt="">
+        </div>
+      </section>
+
+      <section class="section purpose-band" aria-labelledby="purpose-title">
+        <div class="section-heading">
+          <h2 id="purpose-title">The goal is paper mastery, not a shallow summary.</h2>
+          <p>
+            A strong PaperTrail guide should make the student feel as if the paper has already been
+            walked through with a patient tutor. When they read the original paper afterward, the
+            vocabulary, structure, equations, claims, and critique points should already feel known.
+          </p>
+        </div>
+        <div class="purpose-grid" aria-label="PaperTrail learning path">
+          <div>
+            <strong>Reconstruct the argument</strong>
+            <p>Identify the research question, gap, core claim, and the logic connecting them.</p>
+          </div>
+          <div>
+            <strong>Teach the background</strong>
+            <p>Prepare the theory, assumptions, concepts, and field vocabulary needed to read well.</p>
+          </div>
+          <div>
+            <strong>Decode the technical layer</strong>
+            <p>Translate notation, equations, methods, figures, and evidence into plain language.</p>
+          </div>
+          <div>
+            <strong>Build scholarly judgment</strong>
+            <p>Surface limitations, open questions, future research directions, and critique angles.</p>
+          </div>
         </div>
       </section>
 
@@ -244,6 +274,6 @@
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=20260621"></script>
-    <script src="script.js?v=20260622-mathml-sanitize" defer></script>
+    <script src="script.js?v=20260622-purpose" defer></script>
   </body>
 </html>

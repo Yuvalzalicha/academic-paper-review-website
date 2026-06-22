@@ -276,6 +276,46 @@ main {
   line-height: 1.6;
 }
 
+.purpose-band {
+  border-block: 1px solid rgba(158, 219, 255, 0.16);
+  padding-top: 54px;
+  padding-bottom: 58px;
+}
+
+.purpose-band .section-heading {
+  max-width: 900px;
+}
+
+.purpose-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.purpose-grid div {
+  min-height: 100%;
+  border: 1px solid rgba(158, 219, 255, 0.18);
+  border-radius: 8px;
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(16, 30, 54, 0.72), rgba(8, 15, 29, 0.76)),
+    radial-gradient(circle at 100% 0%, rgba(255, 207, 112, 0.12), transparent 11rem);
+}
+
+.purpose-grid strong {
+  display: block;
+  color: var(--ink);
+  font-size: 0.98rem;
+  line-height: 1.35;
+}
+
+.purpose-grid p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
 .split-heading {
   max-width: none;
   display: flex;
@@ -843,6 +883,10 @@ mjx-container {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .purpose-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .review-reader {
     max-height: 94vh;
   }
@@ -883,7 +927,8 @@ mjx-container {
   }
 
   .input-row,
-  .results-grid {
+  .results-grid,
+  .purpose-grid {
     grid-template-columns: 1fr;
   }
 

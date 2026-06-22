@@ -912,6 +912,28 @@ function makeFullPaperBreakdown(paper, likelyQuestion, hasAbstract) {
   };
 }
 
+function makeMasteryChecklist(paper) {
+  const concepts = getConceptText(paper);
+  return {
+    title: "Before opening the paper: mastery checklist",
+    paragraphs: [
+      "Use this checklist as the final self-test. If you can answer most of it, the original paper should feel familiar rather than foreign.",
+    ],
+    bullets: [
+      `Can you explain the paper's topic area in one minute, including the role of ${concepts}?`,
+      "Can you state the research question without looking at the title?",
+      "Can you explain why the question matters to the field?",
+      "Can you name the theory, model, method, dataset, experiment, proof, or framework the paper relies on?",
+      "Can you translate the most important notation or equation into ordinary language?",
+      "Can you describe the authors' evidence and distinguish it from their interpretation?",
+      "Can you state the conclusion and the strongest reason to believe it?",
+      "Can you state the most important limitation or hidden assumption?",
+      "Can you propose one future study that would strengthen the paper and one that might challenge it?",
+      "Can you explain the paper to a classmate without using unexplained jargon?",
+    ],
+  };
+}
+
 function pickSentencesByKeywords(sentences, keywords, limit = 2) {
   return sentences
     .filter((sentence) => keywords.some((keyword) => sentence.toLowerCase().includes(keyword)))
@@ -963,15 +985,17 @@ function makeFullReview(paper) {
 
   return [
     {
-      title: "Student pre-reading brief",
+      title: "End-to-end understanding brief",
       paragraphs: [
         makeStudentPreview(paper),
-        "Use this guide before opening the paper: first build the vocabulary, then predict what the authors must prove, and only then read the technical sections. That order makes the paper feel less like a wall of jargon and more like an argument you can test.",
+        "Use this guide as a paper reconstruction pass before opening the original. The goal is not to replace the paper, but to make its structure, vocabulary, equations, assumptions, and claims feel familiar enough that the original reads like a second pass.",
+        "A strong reading outcome is this: you should be able to explain the paper's question, why it matters, what the authors did, what evidence they produced, where the argument is fragile, and what a serious follow-up study would test.",
       ],
       bullets: [
         `Probable field context: ${concepts}.`,
         `Likely central question: ${likelyQuestion}`,
-        "What you should be able to explain after reading: the problem, the method or argument, the evidence, the limits, and why the paper is worth citing or not citing.",
+        "Mastery target: explain the paper from beginning to end without copying the abstract.",
+        "Professor-level target: identify one strength, one limitation, one hidden assumption, and one future research direction.",
       ],
     },
     {
@@ -1017,7 +1041,7 @@ function makeFullReview(paper) {
     makeFullPaperBreakdown(paper, likelyQuestion, hasAbstract),
     makeConclusionLimitationsGuide(paper),
     {
-      title: "How to read each section",
+      title: "How to read each section like a researcher",
       bullets: [
         "Abstract: underline the research question, method, data or source material, and main claim.",
         "Introduction: identify the gap. The gap tells you why the paper exists.",
@@ -1048,8 +1072,9 @@ function makeFullReview(paper) {
         "If the paper is highly cited, are people citing it for the method, the result, the dataset, or as something to criticize?",
       ],
     },
+    makeMasteryChecklist(paper),
     {
-      title: "What to write in your own review",
+      title: "What a professor-level review should contain",
       bullets: [
         "One sentence explaining the paper's main question.",
         "Two to three sentences summarizing the method or argument.",
