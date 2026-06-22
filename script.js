@@ -1070,18 +1070,18 @@ function makeReviewNotes(paper) {
   const notes = [];
   const conceptText = paper.concepts.length ? paper.concepts.join(", ") : "the keywords and title";
 
-  notes.push(`Start by identifying the research question and how it relates to ${conceptText}.`);
+  notes.push(`Triage the research question and how it contributes to ${conceptText}.`);
 
   if (paper.summary.length > 240) {
-    notes.push("Skim the abstract first, then mark the method, dataset, and main finding separately.");
+    notes.push("Separate the abstract into problem, contribution, method, evidence, and conclusion.");
   } else {
-    notes.push("Because the abstract is limited, use the paper link to verify the method and evidence.");
+    notes.push("Because the abstract is limited, open the source to verify the method, evidence, and contribution.");
   }
 
   notes.push(
     paper.citedByCount
-      ? `Check why later work cited it; OpenAlex lists ${paper.citedByCount.toLocaleString()} citations.`
-      : "Look for related work or replications before relying on the conclusion."
+      ? `Audit its scholarly footprint; OpenAlex lists ${paper.citedByCount.toLocaleString()} citations.`
+      : "Check related work, replications, or follow-up papers before treating the conclusion as settled."
   );
 
   return notes;
@@ -1142,7 +1142,7 @@ function makeExtensiveStudentSummary(paper, abstractSentences, hasAbstract) {
     hasAbstract
       ? `This paper, "${paper.title}", should be read as a contribution to ${concepts}. The abstract gives the first version of the authors' argument: ${paper.summary}`
       : `This paper, "${paper.title}", is listed as a ${paper.type} in ${concepts}. OpenAlex does not provide an abstract, so this section is a preparation guide rather than a substitute for reading the paper.`,
-    `For a student, the most important task is to separate four layers: the problem the authors care about, the theoretical idea or model they use, the evidence they bring, and the conclusion they want the reader to accept. Do not merge those layers too early. A paper can have an interesting problem but weak evidence, or strong technical execution but a narrow conclusion.`,
+    `For a researcher, the most important task is to separate four layers: the problem the authors care about, the theoretical idea or model they use, the evidence they bring, and the conclusion they want the reader to accept. Do not merge those layers too early. A paper can have an interesting problem but weak evidence, or strong technical execution but a narrow conclusion.`,
     `A useful first-pass interpretation is: the paper is trying to move the reader from "there is a problem or gap in ${concepts}" to "this method, argument, experiment, proof, or analysis gives us a better way to understand it." While reading, keep asking what exactly changes between the beginning and the end of the paper.`,
     `The abstract can be unpacked into a reading map. ${abstractMap} Treat each sentence as a clue: one usually states the background problem, one introduces the approach, one summarizes evidence or results, and one points toward the conclusion.`,
     `${getCitationSignal(paper)} It was published in ${paper.year} through ${paper.source}, and OpenAlex marks the access status as ${
@@ -1160,7 +1160,7 @@ function makeEquationGuide(paper) {
     "If the paper optimizes something, expect an objective such as \\[\\mathcal{L}(\\theta)=\\frac{1}{n}\\sum_{i=1}^{n}\\ell\\big(f_\\theta(x_i),y_i\\big).\\] Read it as: choose parameters \\(\\theta\\) that make the average error or cost small across examples. Your job is to understand what counts as error, why that objective is appropriate, and what it ignores.",
     "If the paper is probabilistic or statistical, look for expressions like \\(p(y\\mid x)\\), \\(\\mathbb{E}[X]\\), confidence intervals, likelihoods, priors, or estimators. Translate them into plain English: what is uncertain, what is conditioned on what, and what evidence changes the belief?",
     "If the paper is quantum or physics-related, notation may include states, operators, and expectation values, for example \\(|\\psi\\rangle\\), \\(U(\\theta)\\), or \\[\\langle O\\rangle=\\langle\\psi|U(\\theta)^\\dagger O U(\\theta)|\\psi\\rangle.\\] Read this as: prepare a state, transform it, measure an observable, and interpret the resulting quantity.",
-    "Build a symbol table as you read. A useful table has columns for symbol, plain-English meaning, units or type, where it is defined, and why it matters. This prevents the classic student trap of recognizing the equation visually but not knowing what claim it supports.",
+    "Build a symbol table as you read. A useful table has columns for symbol, plain-English meaning, units or type, where it is defined, and why it matters. This prevents the common trap of recognizing the equation visually but not knowing what claim it supports.",
   ];
 }
 
@@ -1519,7 +1519,7 @@ function makeConclusionLimitationsGuide(paper) {
     paragraphs: [
       conclusionText,
       limitationText,
-      "The future-research suggestions below are generated as a student reading aid. Use them as hypotheses to compare against the authors' own future-work section, not as verified claims about the paper.",
+      "The future-research suggestions below are generated as scholarly prompts. Use them as hypotheses to compare against the authors' own future-work section, not as verified claims about the paper.",
     ],
     bullets: [
       `Replicate or stress-test the main claim in a different setting, dataset, population, period, material system, or benchmark related to ${concepts}.`,
@@ -1555,7 +1555,7 @@ function makeFullReview(paper) {
       ],
     },
     {
-      title: "Extensive summary for students",
+      title: "Research-grade synthesis",
       paragraphs: makeExtensiveStudentSummary(paper, abstractSentences, hasAbstract),
     },
     {
@@ -1582,7 +1582,7 @@ function makeFullReview(paper) {
       ],
     },
     {
-      title: "For dummies",
+      title: "Plain-language reconstruction",
       paragraphs: [
         `In plain language, this paper is about a specific problem inside ${concepts}. Read it as if the authors are trying to answer: "What is happening here, how can we study it, and why should anyone believe the answer?"`,
         "Do not try to understand every technical term on the first pass. First find the problem, the proposed approach, the evidence, and the takeaway. The details become easier once those four pieces are visible.",
@@ -1883,7 +1883,7 @@ function makePrintableReviewHtml(paper, reviewSections) {
         <li>Access signal: ${paper.isOpenAccess ? "Open access" : "Not marked open access"}</li>
         <li>Generated by PaperTrail on ${escapeHtml(generatedAt)}.</li>
       </ul>
-      <p class="small-note">This guide is generated from OpenAlex metadata and available abstract text. Use it as a structured reading aid, then verify details in the original paper.</p>
+      <p class="small-note">This guide is generated from OpenAlex metadata and available abstract text. Use it as structured research intelligence, then verify details in the original paper.</p>
     </section>
     <script>
       window.MathJax = {
