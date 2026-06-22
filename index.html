@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>PaperTrail | Academic Paper Review</title>
+    <title>PaperTrail | Research Intelligence Workspace</title>
     <meta
       name="description"
-      content="Search academic papers and build an end-to-end understanding guide before reading the original paper."
+      content="Search academic papers and generate research-grade intelligence dossiers for scholarly triage, synthesis, and critique."
     >
     <link rel="preconnect" href="https://api.openalex.org">
     <link rel="preload" as="image" href="assets/quantum-hero.png">
-    <link rel="stylesheet" href="styles.css?v=20260622-research-grade">
+    <link rel="stylesheet" href="styles.css?v=20260622-research-workspace">
   </head>
   <body>
     <header class="site-header">
@@ -24,7 +24,7 @@
           <a href="#recommendations">Recommendations</a>
           <a href="#visual-shorts">Visual shorts</a>
           <a href="#account">Account</a>
-          <a href="#reading-list">Reading list</a>
+          <a href="#reading-list">Library</a>
           <a href="#admin" id="admin-nav-link">Admin</a>
         </div>
       </nav>
@@ -33,11 +33,11 @@
     <main id="top">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <h1 id="hero-title">Understand the paper before the paper.</h1>
+          <h1 id="hero-title">Research intelligence for serious papers.</h1>
           <p>
-            PaperTrail is built to turn an intimidating academic paper into a complete pre-reading
-            map: the problem, theory, notation, method, evidence, limitations, and future work,
-            so the original paper feels familiar before you open it.
+            PaperTrail turns academic papers into professional research dossiers: contribution
+            analysis, theory reconstruction, method and evidence audits, notation decoding,
+            limitations, citation context, and future research opportunities.
           </p>
           <div class="hero-actions">
             <a class="button primary" href="#search">Search papers</a>
@@ -45,7 +45,7 @@
           </div>
           <div class="hero-stats" aria-label="PaperTrail capabilities">
             <span>Precise OpenAlex search</span>
-            <span>End-to-end paper guides</span>
+            <span>Research intelligence dossiers</span>
             <span>Readable LaTeX math</span>
           </div>
         </div>
@@ -58,27 +58,26 @@
         <div class="section-heading">
           <h2 id="purpose-title">The goal is research-grade paper intelligence.</h2>
           <p>
-            A strong PaperTrail guide should make a researcher feel as if the paper has already
-            been reconstructed: argument, theory, method, notation, evidence, limitations, and
-            research opportunities. When they read the original paper afterward, the structure and
-            critique points should already feel familiar.
+            PaperTrail is being built for researchers, professors, labs, and research teams who
+            need to evaluate papers quickly without sacrificing rigor. The output should support
+            scholarly decisions: read deeply, cite, teach, replicate, challenge, or build on.
           </p>
         </div>
-        <div class="purpose-grid" aria-label="PaperTrail learning path">
+        <div class="purpose-grid" aria-label="PaperTrail research workflow">
           <div>
             <strong>Reconstruct the argument</strong>
             <p>Identify the research question, gap, core claim, and the logic connecting them.</p>
           </div>
           <div>
-            <strong>Teach the background</strong>
-            <p>Prepare the theory, assumptions, concepts, and field vocabulary needed to read well.</p>
+            <strong>Map the scholarly context</strong>
+            <p>Surface theory, assumptions, prior work, and field vocabulary behind the paper.</p>
           </div>
           <div>
             <strong>Decode the technical layer</strong>
-            <p>Translate notation, equations, methods, figures, and evidence into plain language.</p>
+            <p>Translate notation, equations, methods, figures, and evidence into usable research notes.</p>
           </div>
           <div>
-            <strong>Build scholarly judgment</strong>
+            <strong>Support research decisions</strong>
             <p>Surface limitations, open questions, future research directions, and critique angles.</p>
           </div>
         </div>
@@ -188,9 +187,9 @@
       <section id="account" class="section surface" aria-labelledby="account-title">
         <div class="section-heading split-heading">
           <div>
-            <h2 id="account-title">Free account</h2>
+            <h2 id="account-title">Research workspace</h2>
             <p id="account-copy">
-              Subscribe for free to save papers to your account and return to them later.
+              Create a workspace account to sync your research library, dossiers, and usage across sessions.
             </p>
           </div>
           <button class="button ghost" id="sign-out-button" type="button" hidden>Sign out</button>
@@ -217,7 +216,7 @@
               required
             >
             <div class="auth-actions">
-              <button class="button primary" id="sign-up-button" type="button">Subscribe free</button>
+              <button class="button primary" id="sign-up-button" type="button">Create workspace</button>
               <button class="button ghost" id="sign-in-button" type="submit">Sign in</button>
             </div>
           </form>
@@ -233,7 +232,7 @@
       <section id="reading-list" class="section surface" aria-labelledby="reading-list-title">
         <div class="section-heading split-heading">
           <div>
-            <h2 id="reading-list-title">Reading list</h2>
+            <h2 id="reading-list-title">Research library</h2>
             <p id="reading-list-copy">Saved locally in this browser with no account required.</p>
           </div>
           <button class="button ghost danger" id="clear-list-button" type="button">Clear list</button>
@@ -374,7 +373,7 @@
           <ul></ul>
         </div>
         <div class="full-review">
-          <button class="review-open-button" type="button">Full review and breakdown</button>
+          <button class="review-open-button" type="button">Open research dossier</button>
         </div>
         <div class="card-actions">
           <a class="button small paper-link" target="_blank" rel="noreferrer">Open paper</a>
@@ -389,7 +388,7 @@
       <article class="review-reader">
         <header class="review-reader-header">
           <div>
-            <p class="reader-kicker">PaperTrail reader</p>
+            <p class="reader-kicker">PaperTrail dossier</p>
             <h2 id="review-modal-title"></h2>
             <p id="review-modal-meta"></p>
           </div>
@@ -398,7 +397,7 @@
         <div class="review-reader-body" id="review-modal-content"></div>
         <footer class="review-export review-reader-export">
           <label>
-            Email PDF guide
+            Email research dossier
             <input
               id="review-modal-email"
               type="email"
@@ -407,12 +406,12 @@
             >
           </label>
           <div class="export-actions">
-            <button class="button small" id="review-modal-download" type="button">Download PDF guide</button>
-            <button class="button small" id="review-modal-email-button" type="button">Create PDF + email</button>
+            <button class="button small" id="review-modal-download" type="button">Download PDF dossier</button>
+            <button class="button small" id="review-modal-email-button" type="button">Create dossier + email</button>
           </div>
           <p>
-            Download opens a LaTeX-style printable guide you can save as PDF. Email opens the same
-            guide, then prepares a message so you can attach and send it.
+            Download opens a LaTeX-style research dossier you can save as PDF. Email opens the
+            same dossier, then prepares a message so you can attach and send it.
           </p>
         </footer>
       </article>
@@ -433,6 +432,6 @@
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=20260621"></script>
-    <script src="script.js?v=20260622-research-grade" defer></script>
+    <script src="script.js?v=20260622-research-workspace" defer></script>
   </body>
 </html>

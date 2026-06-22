@@ -225,7 +225,7 @@ function setAuthUiForUser(user) {
   els.authForm.hidden = isSignedIn;
   els.signOutButton.hidden = !isSignedIn;
   els.accountCopy.textContent = isSignedIn
-    ? "Your saved papers are synced to your free PaperTrail account."
+    ? "Your research library is synced to your free PaperTrail account."
     : "Subscribe for free to save papers to your account and return to them later.";
   els.readingListCopy.textContent = isSignedIn
     ? `Synced to ${user.email}.`
@@ -278,7 +278,7 @@ async function trackEvent(eventName, properties = {}) {
       client_session_id: sessionId,
     });
   } catch {
-    // Analytics must never interrupt the reading workflow.
+    // Analytics must never interrupt the research workflow.
   }
 }
 
@@ -334,7 +334,7 @@ function renderAdminMetrics(metrics = {}) {
     ["Active subscribers", metrics.active_subscriptions || 0],
     ["Events 30 days", metrics.events_30_days || 0],
     ["Saved papers", metrics.saved_papers || 0],
-    ["PDF guides", metrics.pdf_guides || 0],
+    ["PDF dossiers", metrics.pdf_guides || 0],
     ["Campaigns", metrics.campaigns || 0],
   ];
 
@@ -513,7 +513,7 @@ async function clearCloudReadingList() {
 
   const { error } = await supabaseClient.from("saved_papers").delete().eq("user_id", currentUser.id);
   if (error) {
-    setAccountStatus(`Could not clear your cloud reading list: ${error.message}`, "Sync needs attention");
+    setAccountStatus(`Could not clear your cloud research library: ${error.message}`, "Sync needs attention");
   }
 }
 
@@ -561,7 +561,7 @@ async function refreshAuthSession() {
 
   currentUser = data.user;
   setAuthUiForUser(currentUser);
-  setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
+  setAccountStatus(`Signed in as ${currentUser.email}. Your research library is synced.`, "Account active");
   await syncUserProfile();
   await loadCloudReadingList();
 }
@@ -589,14 +589,14 @@ function initAuth() {
     currentUser = session?.user || null;
     setAuthUiForUser(currentUser);
     if (currentUser) {
-      setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
+      setAccountStatus(`Signed in as ${currentUser.email}. Your research library is synced.`, "Account active");
       syncUserProfile();
       loadCloudReadingList();
     } else {
       currentProfile = null;
       isAdminUser = false;
       setAdminVisibility();
-      setAccountStatus("Signed out. Sign in again to sync saved papers across devices.", "Account ready");
+      setAccountStatus("Signed out. Sign in again to sync your research library across devices.", "Account ready");
       renderReadingList();
     }
   });
@@ -628,7 +628,7 @@ async function handleSignUp() {
   currentUser = data.user;
   if (currentUser) {
     setAuthUiForUser(currentUser);
-    setAccountStatus(`Account created for ${currentUser.email}. Your reading list is synced.`, "Account active");
+    setAccountStatus(`Account created for ${currentUser.email}. Your research library is synced.`, "Account active");
     await trackEvent("signup_completed");
     await syncUserProfile();
     await loadCloudReadingList();
@@ -664,7 +664,7 @@ async function handleSignIn(event) {
 
   currentUser = data.user;
   setAuthUiForUser(currentUser);
-  setAccountStatus(`Signed in as ${currentUser.email}. Your reading list is synced.`, "Account active");
+  setAccountStatus(`Signed in as ${currentUser.email}. Your research library is synced.`, "Account active");
   await trackEvent("signin_completed");
   await syncUserProfile();
   await loadCloudReadingList();
@@ -679,7 +679,7 @@ async function handleSignOut() {
   isAdminUser = false;
   setAuthUiForUser(null);
   setAdminVisibility();
-  setAccountStatus("Signed out. Sign in again to sync saved papers across devices.", "Account ready");
+  setAccountStatus("Signed out. Sign in again to sync your research library across devices.", "Account ready");
 }
 
 function cleanText(value, fallback = "Not listed") {
@@ -1121,12 +1121,12 @@ function makeStudentPreview(paper) {
   const firstClaim = sentences[0] || `This paper sits in the area of ${concepts}.`;
   const secondClaim =
     sentences[1] ||
-    "Before reading, identify the exact problem, the evidence used, and the authors' main contribution.";
+    "For research triage, identify the exact problem, the evidence used, and the authors' main contribution.";
 
   return [
-    `Student preview: ${firstClaim}`,
-    `Why it matters: the paper connects to ${concepts}, so the useful pre-reading task is to understand the field vocabulary before judging the details.`,
-    `Reading target: ${secondClaim}`,
+    `Intelligence brief: ${firstClaim}`,
+    `Why it matters: the paper connects to ${concepts}, so the professional task is to understand the field context before judging contribution and evidence.`,
+    `Triage target: ${secondClaim}`,
   ].join(" ");
 }
 
@@ -1136,14 +1136,14 @@ function makeExtensiveStudentSummary(paper, abstractSentences, hasAbstract) {
     ? abstractSentences
         .map((sentence, index) => `Sentence ${index + 1}: ${sentence}`)
         .join(" ")
-    : "No abstract sentences are available from OpenAlex, so this guide uses the title, venue, topics, and citation metadata as a reading scaffold.";
+    : "No abstract sentences are available from OpenAlex, so this dossier uses the title, venue, topics, and citation metadata as an intelligence scaffold.";
 
   return [
     hasAbstract
       ? `This paper, "${paper.title}", should be read as a contribution to ${concepts}. The abstract gives the first version of the authors' argument: ${paper.summary}`
-      : `This paper, "${paper.title}", is listed as a ${paper.type} in ${concepts}. OpenAlex does not provide an abstract, so this section is a preparation guide rather than a substitute for reading the paper.`,
+      : `This paper, "${paper.title}", is listed as a ${paper.type} in ${concepts}. OpenAlex does not provide an abstract, so this section is a metadata-based research dossier rather than a substitute for the full paper.`,
     `For a researcher, the most important task is to separate four layers: the problem the authors care about, the theoretical idea or model they use, the evidence they bring, and the conclusion they want the reader to accept. Do not merge those layers too early. A paper can have an interesting problem but weak evidence, or strong technical execution but a narrow conclusion.`,
-    `A useful first-pass interpretation is: the paper is trying to move the reader from "there is a problem or gap in ${concepts}" to "this method, argument, experiment, proof, or analysis gives us a better way to understand it." While reading, keep asking what exactly changes between the beginning and the end of the paper.`,
+    `A useful first-pass interpretation is: the paper is trying to move the researcher from "there is a problem or gap in ${concepts}" to "this method, argument, experiment, proof, or analysis gives us a better way to understand it." During analysis, keep asking what exactly changes between the beginning and the end of the paper.`,
     `The abstract can be unpacked into a reading map. ${abstractMap} Treat each sentence as a clue: one usually states the background problem, one introduces the approach, one summarizes evidence or results, and one points toward the conclusion.`,
     `${getCitationSignal(paper)} It was published in ${paper.year} through ${paper.source}, and OpenAlex marks the access status as ${
       paper.isOpenAccess ? "open access" : "not open access or not clearly open"
@@ -1190,12 +1190,12 @@ function makeTheoreticalBackgroundGuide(paper) {
 function makeFullPaperBreakdown(paper, likelyQuestion, hasAbstract) {
   const concepts = getConceptText(paper);
   return {
-    title: "Full paper breakdown",
+    title: "Paper architecture breakdown",
     paragraphs: [
-      "Use this as a section-by-section checklist while reading the actual paper. It is a structured map generated from the available abstract and metadata, so verify each point against the original PDF or publisher page.",
+      "Use this as a section-by-section intelligence map for evaluating the actual paper. It is generated from the available abstract and metadata, so verify each point against the original PDF or publisher page.",
     ],
     bullets: [
-      `Title and topic: the title "${paper.title}" places the paper inside ${concepts}. Before reading, predict what problem the title implies and what kind of contribution would be meaningful.`,
+      `Title and topic: the title "${paper.title}" places the paper inside ${concepts}. Before deeper analysis, predict what problem the title implies and what kind of contribution would be meaningful.`,
       `Research question: start with this likely question and refine it as you read: ${likelyQuestion}`,
       hasAbstract
         ? `Abstract: break the abstract into problem, method, evidence, and conclusion. The current abstract signal is: ${paper.summary}`
@@ -1219,9 +1219,9 @@ function makeFullPaperBreakdown(paper, likelyQuestion, hasAbstract) {
 function makeMasteryChecklist(paper) {
   const concepts = getConceptText(paper);
   return {
-    title: "Before opening the paper: mastery checklist",
+    title: "Research-readiness checklist",
     paragraphs: [
-      "Use this checklist as the final self-test. If you can answer most of it, the original paper should feel familiar rather than foreign.",
+      "Use this checklist as the final quality gate for the dossier. If most items are answerable, the paper is ready for serious reading, citation evaluation, lab discussion, or follow-up planning.",
     ],
     bullets: [
       `Can you explain the paper's topic area in one minute, including the role of ${concepts}?`,
@@ -1233,7 +1233,30 @@ function makeMasteryChecklist(paper) {
       "Can you state the conclusion and the strongest reason to believe it?",
       "Can you state the most important limitation or hidden assumption?",
       "Can you propose one future study that would strengthen the paper and one that might challenge it?",
-      "Can you explain the paper to a classmate without using unexplained jargon?",
+      "Can you explain the paper to a research colleague without relying on unexplained jargon?",
+    ],
+  };
+}
+
+function makeResearchDecisionGuide(paper) {
+  const citationSignal = paper.citedByCount
+    ? `OpenAlex lists ${paper.citedByCount.toLocaleString()} citations, so inspect whether the paper is cited for its method, result, dataset, framing, or as a point of critique.`
+    : "OpenAlex does not list citations yet, so treat influence and reliability as open questions.";
+
+  return {
+    title: "Research decision matrix",
+    paragraphs: [
+      "Use this section to decide what role the paper should play in a professional research workflow. The goal is not only to understand the paper, but to decide what to do with it.",
+      citationSignal,
+    ],
+    bullets: [
+      "Cite: cite it if the paper gives a clear definition, method, dataset, result, or theoretical frame that your own work directly depends on.",
+      "Teach: teach it if the paper cleanly demonstrates a concept, method, or controversy that would help others understand the field.",
+      "Replicate: replicate it if the claim is important, surprising, under-tested, or depends on data, assumptions, or implementation choices that need verification.",
+      "Challenge: challenge it if the conclusion overreaches the evidence, ignores plausible alternatives, or depends on fragile assumptions.",
+      "Build on: build on it if the method or theory opens a clear extension, new benchmark, broader domain, or stronger experimental design.",
+      "Monitor: monitor it if the paper is promising but too new, narrow, or weakly validated to rely on yet.",
+      "Skip: skip deep reading if the paper does not match your research question, lacks enough methodological detail, or contributes little beyond familiar prior work.",
     ],
   };
 }
@@ -1368,7 +1391,7 @@ function makeShortPlan(paper, targetDuration = 60) {
       visual: "Dim the confident diagram and highlight one assumption, dataset boundary, model choice, or missing comparison as the pressure point.",
     },
     {
-      label: "Reading target",
+      label: "Research target",
       time: timeRange(sceneLengths[5]),
       narration: "When you read the paper, ask: what exactly changed from the first diagram to the last?",
       visual: "Return to the opening diagram, now simplified. End on a clean paper title card and one reading question.",
@@ -1541,17 +1564,17 @@ function makeFullReview(paper) {
 
   return [
     {
-      title: "End-to-end understanding brief",
+      title: "Executive intelligence brief",
       paragraphs: [
         makeStudentPreview(paper),
-        "Use this guide as a paper reconstruction pass before opening the original. The goal is not to replace the paper, but to make its structure, vocabulary, equations, assumptions, and claims feel familiar enough that the original reads like a second pass.",
-        "A strong reading outcome is this: you should be able to explain the paper's question, why it matters, what the authors did, what evidence they produced, where the argument is fragile, and what a serious follow-up study would test.",
+        "Use this dossier as a paper reconstruction pass before committing deep reading time. The goal is not to replace the paper, but to expose its structure, vocabulary, equations, assumptions, evidence, and claims so a researcher can decide how to engage with it.",
+        "A strong research outcome is this: you should be able to explain the paper's question, why it matters, what the authors did, what evidence they produced, where the argument is fragile, and what a serious follow-up study would test.",
       ],
       bullets: [
         `Probable field context: ${concepts}.`,
         `Likely central question: ${likelyQuestion}`,
-        "Mastery target: explain the paper from beginning to end without copying the abstract.",
-        "Professor-level target: identify one strength, one limitation, one hidden assumption, and one future research direction.",
+        "Intelligence target: reconstruct the paper's argument without copying the abstract.",
+        "Research target: identify one strength, one limitation, one hidden assumption, and one future research direction.",
       ],
     },
     {
@@ -1559,7 +1582,7 @@ function makeFullReview(paper) {
       paragraphs: makeExtensiveStudentSummary(paper, abstractSentences, hasAbstract),
     },
     {
-      title: "Concept map before reading",
+      title: "Concept and contribution map",
       paragraphs: [
         `Treat ${concepts} as the concept map for your first pass. Your job is to see which concept is the main object of study, which concepts are tools, and which concepts are background context.`,
       ],
@@ -1572,17 +1595,17 @@ function makeFullReview(paper) {
     },
     makeTheoreticalBackgroundGuide(paper),
     {
-      title: "Mathematics and notation guide",
+      title: "Mathematics and notation audit",
       paragraphs: makeEquationGuide(paper),
       bullets: [
-        "Circle definitions of variables the first time they appear.",
-        "Translate each equation into plain English before reading the next paragraph.",
+        "Identify definitions of variables the first time they appear.",
+        "Translate each equation into ordinary research language before interpreting the next paragraph.",
         "Separate definitions, assumptions, objective functions, and final results; they play different roles.",
         "If notation changes between sections, make a small symbol table in your notes.",
       ],
     },
     {
-      title: "Plain-language reconstruction",
+      title: "Plain-language argument reconstruction",
       paragraphs: [
         `In plain language, this paper is about a specific problem inside ${concepts}. Read it as if the authors are trying to answer: "What is happening here, how can we study it, and why should anyone believe the answer?"`,
         "Do not try to understand every technical term on the first pass. First find the problem, the proposed approach, the evidence, and the takeaway. The details become easier once those four pieces are visible.",
@@ -1597,7 +1620,7 @@ function makeFullReview(paper) {
     makeFullPaperBreakdown(paper, likelyQuestion, hasAbstract),
     makeConclusionLimitationsGuide(paper),
     {
-      title: "How to read each section like a researcher",
+      title: "Section-by-section research workflow",
       bullets: [
         "Abstract: underline the research question, method, data or source material, and main claim.",
         "Introduction: identify the gap. The gap tells you why the paper exists.",
@@ -1609,7 +1632,7 @@ function makeFullReview(paper) {
       ],
     },
     {
-      title: "Strengths to look for",
+      title: "Evidence and contribution strengths",
       bullets: [
         "A clearly stated research question or contribution.",
         "A method that matches the stated question.",
@@ -1619,7 +1642,7 @@ function makeFullReview(paper) {
       ],
     },
     {
-      title: "Possible limitations and critique angles",
+      title: "Limitations and critique angles",
       bullets: [
         "Does the paper overclaim from limited data, narrow examples, or a single context?",
         "Are important alternative explanations considered?",
@@ -1628,17 +1651,18 @@ function makeFullReview(paper) {
         "If the paper is highly cited, are people citing it for the method, the result, the dataset, or as something to criticize?",
       ],
     },
+    makeResearchDecisionGuide(paper),
     makeMasteryChecklist(paper),
     {
-      title: "What a professor-level review should contain",
+      title: "Scholarly assessment output",
       bullets: [
-        "One sentence explaining the paper's main question.",
-        "Two to three sentences summarizing the method or argument.",
-        "One paragraph on the main contribution.",
-        "One paragraph on limitations or missing context.",
-        "One paragraph proposing future work based on the paper's conclusion, limitations, or open assumptions.",
-        "One short note about the most important equation, model, assumption, or definition if the paper is technical.",
-        "A final judgment: useful, convincing, promising but incomplete, or not reliable enough yet.",
+        "A concise statement of the paper's main research question.",
+        "A method or argument summary suitable for lab notes or a literature review.",
+        "A contribution assessment: what is new, useful, or theoretically important?",
+        "A limitations assessment: what remains uncertain, narrow, under-tested, or assumption-dependent?",
+        "A future-work paragraph based on the paper's conclusion, limitations, or open assumptions.",
+        "A technical note about the most important equation, model, assumption, or definition if the paper is technical.",
+        "A final research judgment: cite, teach, replicate, challenge, monitor, or skip.",
       ],
     },
   ];
@@ -1681,7 +1705,7 @@ function escapeHtml(value) {
 }
 
 function slugifyTitle(title) {
-  return normalizeSearchText(title).replace(/\s+/g, "-").slice(0, 70) || "paper-review-guide";
+  return normalizeSearchText(title).replace(/\s+/g, "-").slice(0, 70) || "research-dossier";
 }
 
 function renderReviewSectionHtml(section) {
@@ -1704,13 +1728,13 @@ function renderReviewSectionHtml(section) {
 function makePrintableReviewHtml(paper, reviewSections) {
   const concepts = getConceptText(paper);
   const generatedAt = new Date().toLocaleString();
-  const fileName = `${slugifyTitle(paper.title)}-review-guide.pdf`;
+  const fileName = `${slugifyTitle(paper.title)}-research-dossier.pdf`;
 
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>${escapeHtml(paper.title)} | PaperTrail Review Guide</title>
+    <title>${escapeHtml(paper.title)} | PaperTrail Research Dossier</title>
     <style>
       @page {
         margin: 0.75in;
@@ -1846,7 +1870,7 @@ function makePrintableReviewHtml(paper, reviewSections) {
   </head>
   <body>
     <header>
-      <p class="label">PaperTrail LaTeX-Style Reading Guide</p>
+      <p class="label">PaperTrail Research Intelligence Dossier</p>
       <h1>${richTextHtml(paper.title)}</h1>
       <p class="meta">${richTextHtml(paper.authors)}</p>
       <p class="meta">${richTextHtml(paper.source)} · ${richTextHtml(paper.date)} · ${richTextHtml(paper.type)}</p>
@@ -1859,18 +1883,18 @@ function makePrintableReviewHtml(paper, reviewSections) {
     </div>
 
     <div class="abstract-box">
-      <h2>Abstract-Based Summary</h2>
+      <h2>Abstract-Based Intelligence Summary</h2>
       <p>${richTextHtml(paper.summary)}</p>
     </div>
 
     ${reviewSections.map(renderReviewSectionHtml).join("")}
 
     <section class="reading-plan">
-      <h2>Suggested Reading Workflow</h2>
+      <h2>Research Workflow</h2>
       <ul>
         <li>First pass: read title, abstract, introduction, section headings, figures, and conclusion.</li>
         <li>Second pass: read methods and results slowly; write down assumptions and unfamiliar terms.</li>
-        <li>Third pass: compare claims against evidence and write your own critique before reading other reviews.</li>
+        <li>Third pass: compare claims against evidence and write a research judgment before consulting external commentary.</li>
         <li>Final note: decide whether the paper is foundational, useful background, methodologically weak, or worth deeper follow-up.</li>
       </ul>
     </section>
@@ -1883,7 +1907,7 @@ function makePrintableReviewHtml(paper, reviewSections) {
         <li>Access signal: ${paper.isOpenAccess ? "Open access" : "Not marked open access"}</li>
         <li>Generated by PaperTrail on ${escapeHtml(generatedAt)}.</li>
       </ul>
-      <p class="small-note">This guide is generated from OpenAlex metadata and available abstract text. Use it as structured research intelligence, then verify details in the original paper.</p>
+      <p class="small-note">This dossier is generated from OpenAlex metadata and available abstract text. Use it as structured research intelligence, then verify details in the original paper.</p>
     </section>
     <script>
       window.MathJax = {
@@ -1903,11 +1927,11 @@ function makePrintableReviewHtml(paper, reviewSections) {
 function prepareReviewEmail(paper, email, fileName) {
   if (!email) return;
 
-  const subject = `PaperTrail review guide: ${paper.title}`;
+  const subject = `PaperTrail research dossier: ${paper.title}`;
   const body = [
     "Hi,",
     "",
-    `I prepared a PaperTrail PDF reading guide for: ${paper.title}`,
+    `I prepared a PaperTrail research intelligence dossier for: ${paper.title}`,
     "",
     "Please attach the PDF generated from the browser print window before sending.",
     "",
@@ -1922,10 +1946,10 @@ function prepareReviewEmail(paper, email, fileName) {
 function openReviewPdfGuide(paper, email = "") {
   const reviewSections = makeFullReview(paper);
   const printableWindow = window.open("", "_blank");
-  const fileName = `${slugifyTitle(paper.title)}-review-guide.pdf`;
+  const fileName = `${slugifyTitle(paper.title)}-research-dossier.pdf`;
 
   if (!printableWindow) {
-    alert("Please allow popups for PaperTrail so the printable PDF guide can open.");
+    alert("Please allow popups for PaperTrail so the printable research dossier can open.");
     return;
   }
 
@@ -2000,7 +2024,7 @@ function renderExpandableSummary(card, paper) {
 
 function setModalPaperActions(paper) {
   els.reviewModalDownload.onclick = () => {
-    trackEvent("pdf_guide_created", { paper_id: paper.id, delivery: "download" });
+    trackEvent("pdf_dossier_created", { paper_id: paper.id, delivery: "download" });
     openReviewPdfGuide(paper);
   };
   els.reviewModalEmailButton.onclick = () => {
@@ -2009,7 +2033,7 @@ function setModalPaperActions(paper) {
       els.reviewModalEmail.reportValidity();
       return;
     }
-    trackEvent("pdf_guide_created", { paper_id: paper.id, delivery: "email" });
+    trackEvent("pdf_dossier_created", { paper_id: paper.id, delivery: "email" });
     openReviewPdfGuide(paper, email);
   };
 }
@@ -2113,7 +2137,7 @@ function renderReadingList() {
   renderPapers(
     els.readingListResults,
     readingList,
-    "Your reading list is empty. Save papers from search or recommendations to see them here.",
+    "Your research library is empty. Save papers from search or recommendations to see them here.",
     { hash: "#reading-list", source: "reading-list" }
   );
   els.clearListButton.disabled = readingList.length === 0;
