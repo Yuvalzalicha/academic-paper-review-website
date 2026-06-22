@@ -670,6 +670,47 @@ function makeEquationGuide(paper) {
   ];
 }
 
+function pickSentencesByKeywords(sentences, keywords, limit = 2) {
+  return sentences
+    .filter((sentence) => keywords.some((keyword) => sentence.toLowerCase().includes(keyword)))
+    .slice(0, limit);
+}
+
+function makeConclusionLimitationsGuide(paper) {
+  const concepts = getConceptText(paper);
+  const sentences = getSentences(paper.summary, 8);
+  const conclusionSentences = pickSentencesByKeywords(
+    sentences,
+    ["conclude", "show", "demonstrate", "suggest", "find", "found", "result", "indicate", "reveal", "support"]
+  );
+  const limitationSentences = pickSentencesByKeywords(
+    sentences,
+    ["limit", "limitation", "however", "although", "while", "may", "might", "uncertain", "bias", "challenge", "future", "further", "remain"]
+  );
+  const conclusionText = conclusionSentences.length
+    ? `Likely conclusion signal from the available abstract: ${conclusionSentences.join(" ")}`
+    : "The abstract does not clearly expose the paper's conclusion, so treat the final claim as something to verify in the original conclusion/discussion section.";
+  const limitationText = limitationSentences.length
+    ? `Possible limitation or caveat signal from the available abstract: ${limitationSentences.join(" ")}`
+    : "The available abstract does not clearly state limitations. When reading the full paper, actively search the discussion section for scope, dataset, assumptions, generalizability, and failure cases.";
+
+  return {
+    title: "Conclusions, limitations, and future research",
+    paragraphs: [
+      conclusionText,
+      limitationText,
+      "The future-research suggestions below are generated as a student reading aid. Use them as hypotheses to compare against the authors' own future-work section, not as verified claims about the paper.",
+    ],
+    bullets: [
+      `Replicate or stress-test the main claim in a different setting, dataset, population, period, material system, or benchmark related to ${concepts}.`,
+      "Identify the strongest assumption in the method or argument, then design a follow-up study that weakens, removes, or directly tests that assumption.",
+      "Compare the paper's approach with at least one alternative theory, model, baseline, or measurement strategy to see whether the conclusion still holds.",
+      "Look for boundary conditions: when would the result fail, become less useful, or require a different interpretation?",
+      "If data, code, materials, or derivations are not fully transparent, propose a reproducibility-focused follow-up that makes those pieces easier to inspect.",
+    ],
+  };
+}
+
 function makeFullReview(paper) {
   const concepts = getConceptText(paper);
   const abstractSentences = getSentences(paper.summary, 5);
@@ -763,6 +804,7 @@ function makeFullReview(paper) {
         `Language: ${paper.language}`,
       ],
     },
+    makeConclusionLimitationsGuide(paper),
     {
       title: "How to read each section",
       bullets: [
@@ -802,6 +844,7 @@ function makeFullReview(paper) {
         "Two to three sentences summarizing the method or argument.",
         "One paragraph on the main contribution.",
         "One paragraph on limitations or missing context.",
+        "One paragraph proposing future work based on the paper's conclusion, limitations, or open assumptions.",
         "One short note about the most important equation, model, assumption, or definition if the paper is technical.",
         "A final judgment: useful, convincing, promising but incomplete, or not reliable enough yet.",
       ],
