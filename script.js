@@ -81,6 +81,7 @@ function loadReadingList() {
 }
 
 function saveReadingList() {
+  readingList = readingList.map(normalizePaperMath);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(readingList));
   renderReadingList();
 }
@@ -184,7 +185,7 @@ function setAuthUiForUser(user) {
 }
 
 function getPaperForStorage(paper) {
-  const { relevance, ...paperForStorage } = paper;
+  const { relevance, ...paperForStorage } = normalizePaperMath(paper);
   return paperForStorage;
 }
 
@@ -455,10 +456,12 @@ function mathMlToLatex(mathMarkup) {
 
 function convertEmbeddedMathMarkup(value) {
   if (!value || typeof value !== "string") return "";
-  return decodeMathEntities(value).replace(/<[^>\s:]*:?math\b[\s\S]*?<\/[^>\s:]*:?math>/gi, (mathMarkup) => {
-    const latex = mathMlToLatex(mathMarkup);
-    return latex ? ` ${latex} ` : " ";
-  });
+  return decodeMathEntities(value)
+    .replace(/<[^>\s:]*:?math\b[\s\S]*?<\/[^>\s:]*:?math>/gi, (mathMarkup) => {
+      const latex = mathMlToLatex(mathMarkup);
+      return latex ? ` ${latex} ` : " ";
+    })
+    .replace(/<[^>\s:]*:?math\b[\s\S]*$/gi, " ");
 }
 
 function normalizeMathText(value) {
@@ -489,6 +492,18 @@ function normalizeMathText(value) {
       };
       return `${prefix}${greek[name] || name}`;
     });
+}
+
+function normalizePaperMath(paper) {
+  if (!paper) return paper;
+  return {
+    ...paper,
+    title: normalizeMathText(paper.title),
+    authors: normalizeMathText(paper.authors),
+    source: normalizeMathText(paper.source),
+    summary: normalizeMathText(paper.summary),
+    concepts: (paper.concepts || []).map((concept) => normalizeMathText(concept)),
+  };
 }
 
 function renderRichText(target, value) {
@@ -712,7 +727,7 @@ function paperFromWork(work) {
     .slice(0, 8)
     .filter(Boolean);
 
-  return {
+  return normalizePaperMath({
     id: work.id,
     title: cleanText(work.display_name, "Untitled work"),
     year: work.publication_year || "Year unknown",
@@ -728,7 +743,7 @@ function paperFromWork(work) {
     isOpenAccess: Boolean(work.open_access?.is_oa),
     language: work.language || "unknown",
     concepts,
-  };
+  });
 }
 
 async function fetchPapers(query, options = {}) {
@@ -1457,7 +1472,7 @@ function renderPapers(container, papers, emptyMessage, options = {}) {
     return;
   }
 
-  papers.forEach((paper) => {
+  papers.map(normalizePaperMath).forEach((paper) => {
     const card = els.cardTemplate.content.firstElementChild.cloneNode(true);
 
     card.id = paperCardId(source, paper.id);
@@ -1514,6 +1529,8 @@ function renderReadingList() {
 function restoreDiscoveryViews() {
   const lastSearch = loadStoredJson(SEARCH_STATE_KEY);
   if (lastSearch?.papers?.length) {
+    const restoredPapers = lastSearch.papers.map(normalizePaperMath);
+    saveStoredJson(SEARCH_STATE_KEY, { ...lastSearch, papers: restoredPapers });
     els.searchInput.value = lastSearch.query || "";
     const precisionInput = els.searchForm.querySelector(`[name="precision"][value="${lastSearch.precision}"]`);
     if (precisionInput) {
@@ -1521,7 +1538,7 @@ function restoreDiscoveryViews() {
     }
     els.searchStatus.textContent =
       lastSearch.status || `Restored your last search for "${lastSearch.query}".`;
-    renderPapers(els.searchResults, lastSearch.papers, "No matching papers found. Try a broader topic.", {
+    renderPapers(els.searchResults, restoredPapers, "No matching papers found. Try a broader topic.", {
       hash: "#search",
       source: "search",
     });
@@ -1529,12 +1546,14 @@ function restoreDiscoveryViews() {
 
   const lastRecommendations = loadStoredJson(RECOMMENDATION_STATE_KEY);
   if (lastRecommendations?.papers?.length) {
+    const restoredPapers = lastRecommendations.papers.map(normalizePaperMath);
+    saveStoredJson(RECOMMENDATION_STATE_KEY, { ...lastRecommendations, papers: restoredPapers });
     els.interestInput.value = lastRecommendations.interests || "";
     els.recommendationStatus.textContent =
       lastRecommendations.status || "Restored your last recommendations.";
     renderPapers(
       els.recommendationResults,
-      lastRecommendations.papers,
+      restoredPapers,
       "No recommendations found. Try a more specific mix of methods and topics.",
       { hash: "#recommendations", source: "recommendations" }
     );
