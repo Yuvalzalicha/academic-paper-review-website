@@ -330,10 +330,27 @@ main {
 
 .search-panel,
 .interest-panel,
+.ingest-panel,
 .auth-form {
   display: grid;
   gap: 10px;
   margin-bottom: 14px;
+}
+
+.ingest-panel input[type="file"] {
+  width: 100%;
+  border: 1px dashed rgba(111, 232, 238, 0.42);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(12, 23, 43, 0.72);
+  color: var(--ink);
+}
+
+.form-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
 }
 
 .precision-controls {
@@ -570,6 +587,27 @@ select:focus {
   border-top: 1px solid var(--line);
   padding-top: 14px;
   padding-left: 18px;
+}
+
+.video-job-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(255, 207, 112, 0.24);
+  border-radius: 8px;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 207, 112, 0.08), rgba(88, 230, 255, 0.06)),
+    rgba(9, 18, 34, 0.76);
+}
+
+.video-job-card strong {
+  color: var(--plasma);
+}
+
+.video-job-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .results-grid {

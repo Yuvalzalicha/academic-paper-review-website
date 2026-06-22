@@ -123,6 +123,33 @@ create table if not exists public.marketing_campaigns (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.video_jobs (
+  id uuid primary key default gen_random_uuid(),
+  public_token text not null default encode(gen_random_bytes(18), 'hex'),
+  user_id uuid references auth.users(id) on delete set null,
+  anonymous_session_id text,
+  status text not null default 'queued' check (status in ('queued', 'rendering', 'completed', 'failed', 'canceled')),
+  paper jsonb not null,
+  abstract text,
+  duration_seconds integer not null default 60,
+  scene_plan jsonb not null,
+  narration_text text,
+  captions jsonb not null default '[]'::jsonb,
+  scene_timings jsonb not null default '[]'::jsonb,
+  visual_instructions jsonb not null default '{}'::jsonb,
+  composition_html text,
+  render_manifest jsonb not null default '{}'::jsonb,
+  preview_url text,
+  video_url text,
+  audio_url text,
+  error_message text,
+  renderer text not null default 'papertrail-geometric-v1',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz,
+  unique (public_token)
+);
+
 create table if not exists public.saved_papers (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -136,6 +163,8 @@ create index if not exists app_events_name_created_at_idx on public.app_events (
 create index if not exists usage_counters_period_idx on public.usage_counters (period desc);
 create unique index if not exists usage_counters_subject_period_idx on public.usage_counters (subject_key, period);
 create index if not exists user_subscriptions_status_idx on public.user_subscriptions (status);
+create index if not exists video_jobs_user_created_at_idx on public.video_jobs (user_id, created_at desc);
+create index if not exists video_jobs_status_created_at_idx on public.video_jobs (status, created_at asc);
 
 drop trigger if exists user_profiles_updated_at on public.user_profiles;
 create trigger user_profiles_updated_at
@@ -160,6 +189,11 @@ for each row execute function public.set_updated_at();
 drop trigger if exists marketing_campaigns_updated_at on public.marketing_campaigns;
 create trigger marketing_campaigns_updated_at
 before update on public.marketing_campaigns
+for each row execute function public.set_updated_at();
+
+drop trigger if exists video_jobs_updated_at on public.video_jobs;
+create trigger video_jobs_updated_at
+before update on public.video_jobs
 for each row execute function public.set_updated_at();
 
 create or replace function public.is_admin()
@@ -283,7 +317,9 @@ begin
       ),
       'saved_papers', (select count(*) from public.saved_papers),
       'pdf_guides', (select coalesce(sum(pdf_guides), 0) from public.usage_counters),
-      'campaigns', (select count(*) from public.marketing_campaigns)
+      'campaigns', (select count(*) from public.marketing_campaigns),
+      'video_jobs', (select count(*) from public.video_jobs),
+      'completed_videos', (select count(*) from public.video_jobs where status = 'completed')
     ),
     'usage', (
       select coalesce(jsonb_agg(row_to_json(row_data) order by row_data.period desc, row_data.email), '[]'::jsonb)
@@ -359,6 +395,7 @@ alter table public.user_subscriptions enable row level security;
 alter table public.usage_counters enable row level security;
 alter table public.app_events enable row level security;
 alter table public.marketing_campaigns enable row level security;
+alter table public.video_jobs enable row level security;
 alter table public.saved_papers enable row level security;
 
 drop policy if exists "Users can read their own profile" on public.user_profiles;
@@ -423,6 +460,28 @@ using (public.is_admin());
 drop policy if exists "Admins can manage campaigns" on public.marketing_campaigns;
 create policy "Admins can manage campaigns"
 on public.marketing_campaigns
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "Users can read their own video jobs" on public.video_jobs;
+create policy "Users can read their own video jobs"
+on public.video_jobs
+for select
+to authenticated
+using (auth.uid() = user_id or public.is_admin());
+
+drop policy if exists "Users can create their own video jobs" on public.video_jobs;
+create policy "Users can create their own video jobs"
+on public.video_jobs
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "Admins can manage video jobs" on public.video_jobs;
+create policy "Admins can manage video jobs"
+on public.video_jobs
 for all
 to authenticated
 using (public.is_admin())

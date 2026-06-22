@@ -4,6 +4,8 @@ const VIEW_STATE_KEY = "papertrail-view-state";
 const SEARCH_STATE_KEY = "papertrail-last-search";
 const RECOMMENDATION_STATE_KEY = "papertrail-last-recommendations";
 const SHORTS_STATE_KEY = "papertrail-last-short";
+const VIDEO_JOB_STATE_KEY = "papertrail-last-video-job";
+const INGEST_STATE_KEY = "papertrail-last-ingested-paper";
 const SESSION_KEY = "papertrail-session-id";
 const SUPABASE_FALLBACK_CONFIG = {
   url: "https://iijjknxythzulznyisdt.supabase.co",
@@ -41,6 +43,11 @@ const els = {
   searchInput: document.querySelector("#search-input"),
   searchStatus: document.querySelector("#search-status"),
   searchResults: document.querySelector("#search-results"),
+  ingestForm: document.querySelector("#ingest-form"),
+  paperPdfInput: document.querySelector("#paper-pdf-input"),
+  paperTitleInput: document.querySelector("#paper-title-input"),
+  ingestStatus: document.querySelector("#ingest-status"),
+  ingestResults: document.querySelector("#ingest-results"),
   interestForm: document.querySelector("#interest-form"),
   interestInput: document.querySelector("#interest-input"),
   recommendationStatus: document.querySelector("#recommendation-status"),
@@ -100,6 +107,9 @@ let currentUser = null;
 let currentProfile = null;
 let isAdminUser = false;
 let viewRestoreQueued = true;
+let currentShortPlan = null;
+let currentVideoJob = loadStoredJson(VIDEO_JOB_STATE_KEY);
+let videoJobPollTimer = null;
 
 function getSessionId() {
   let sessionId = localStorage.getItem(SESSION_KEY);
@@ -154,7 +164,7 @@ function saveViewState(nextState) {
 
 function rememberSection(hash) {
   if (!hash) return;
-  if (!["#search", "#recommendations", "#visual-shorts", "#reading-list"].includes(hash)) {
+  if (!["#ingest", "#search", "#recommendations", "#visual-shorts", "#reading-list"].includes(hash)) {
     saveViewState({ hash, paperId: null, reviewOpen: false, source: null });
     return;
   }
@@ -170,7 +180,7 @@ function restoreSavedView() {
 
   const state = getCurrentViewState();
   const activeHash = window.location.hash || state.hash;
-  if (activeHash && !["#search", "#recommendations", "#reading-list"].includes(activeHash)) {
+  if (activeHash && !["#ingest", "#search", "#recommendations", "#reading-list"].includes(activeHash)) {
     viewRestoreQueued = false;
     return;
   }
@@ -335,6 +345,8 @@ function renderAdminMetrics(metrics = {}) {
     ["Events 30 days", metrics.events_30_days || 0],
     ["Saved papers", metrics.saved_papers || 0],
     ["PDF dossiers", metrics.pdf_guides || 0],
+    ["Video jobs", metrics.video_jobs || 0],
+    ["Completed videos", metrics.completed_videos || 0],
     ["Campaigns", metrics.campaigns || 0],
   ];
 
@@ -903,6 +915,139 @@ function uniqueItems(items) {
   return [...new Set(items.filter(Boolean))];
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getPdfJs() {
+  const pdfjs = window.pdfjsLib;
+  if (pdfjs?.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc =
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+  }
+  return pdfjs;
+}
+
+async function extractPdfText(file) {
+  const pdfjs = getPdfJs();
+  if (!pdfjs?.getDocument) {
+    throw new Error("PDF engine is still loading. Try again in a moment.");
+  }
+
+  const data = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data }).promise;
+  const pages = [];
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const text = content.items
+      .map((item) => item.str)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text) {
+      pages.push({ pageNumber, text });
+    }
+  }
+
+  return {
+    pageCount: pdf.numPages,
+    text: normalizeMathText(pages.map((page) => page.text).join("\n\n")),
+    pages,
+  };
+}
+
+function getSectionPatterns() {
+  return [
+    ["abstract", "(?:abstract)"],
+    ["introduction", "(?:introduction)"],
+    ["relatedWork", "(?:related work|background|prior work)"],
+    ["methods", "(?:methodology|methods?|materials and methods|model|approach)"],
+    ["results", "(?:results?|experiments?|evaluation)"],
+    ["discussion", "(?:discussion)"],
+    ["limitations", "(?:limitations?|threats to validity)"],
+    ["conclusion", "(?:conclusions?|concluding remarks)"],
+    ["references", "(?:references|bibliography)"],
+  ];
+}
+
+function extractPaperSections(fullText) {
+  const text = normalizeMathText(fullText)
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  const hits = getSectionPatterns()
+    .map(([key, labelPattern]) => {
+      const anchoredPattern = new RegExp(`(?:^|\\n)\\s*(?:\\d+\\.?\\s*)?(${labelPattern})\\s*(?:\\n|$)`, "i");
+      const loosePattern = new RegExp(`(?:^|[.!?]\\s+|\\n)\\s*(?:\\d+\\.?\\s*)?(${labelPattern})(?=\\s+[A-Z0-9])`, "i");
+      const match = anchoredPattern.exec(text) || loosePattern.exec(text);
+      return match ? { key, index: match.index + match[0].indexOf(match[1]), label: match[1] } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.index - b.index);
+
+  const sections = {};
+  hits.forEach((hit, index) => {
+    const next = hits[index + 1];
+    const raw = text.slice(hit.index, next ? next.index : undefined).trim();
+    const withoutHeading = raw
+      .replace(new RegExp(`^(?:\\d+\\.?\\s*)?${escapeRegExp(hit.label)}\\s*`, "i"), "")
+      .trim();
+    sections[hit.key] = withoutHeading || raw;
+  });
+
+  if (!sections.abstract) {
+    sections.abstract = getSentences(text, 8).join(" ");
+  }
+
+  return sections;
+}
+
+function getLikelyTitleFromPdf(fileName, fullText) {
+  const firstLines = fullText
+    .split(/\n|\.\s/)
+    .map((line) => cleanText(line, ""))
+    .filter((line) => line.length > 12 && line.length < 180);
+  return firstLines[0] || fileName.replace(/\.pdf$/i, "").replace(/[-_]/g, " ");
+}
+
+function paperFromPdfExtraction(file, extraction, titleOverride = "") {
+  const sections = extractPaperSections(extraction.text);
+  const title = cleanText(titleOverride, "") || getLikelyTitleFromPdf(file.name, extraction.text);
+  const summary = sections.abstract || getSentences(extraction.text, 8).join(" ");
+  const concepts = uniqueItems(
+    [title, sections.abstract || "", sections.introduction || ""]
+      .join(" ")
+      .match(/\b[A-Z][A-Za-z-]{4,}(?:\s+[A-Z][A-Za-z-]{4,}){0,2}\b/g) || []
+  ).slice(0, 8);
+
+  return normalizePaperMath({
+    id: `uploaded:${file.name}:${file.size}:${file.lastModified}`,
+    title,
+    year: "Uploaded paper",
+    date: new Date(file.lastModified || Date.now()).toISOString().slice(0, 10),
+    type: "full-text PDF",
+    source: "Uploaded PDF",
+    authors: "Extracted from uploaded paper",
+    summary: summary || "PaperTrail extracted full text from this PDF, but could not identify a clean abstract.",
+    url: "",
+    citedByCount: 0,
+    isOpenAccess: true,
+    language: "unknown",
+    concepts: concepts.length ? concepts : ["Full-text paper"],
+    fullText: extraction.text,
+    extractedSections: sections,
+    extraction: {
+      source: "uploaded-pdf",
+      fileName: file.name,
+      pageCount: extraction.pageCount,
+      characterCount: extraction.text.length,
+      extractedAt: new Date().toISOString(),
+    },
+  });
+}
+
 function parseSearchQuery(query) {
   const normalized = cleanText(query, "");
   const phrases = [...normalized.matchAll(/"([^"]+)"/g)]
@@ -1070,12 +1215,21 @@ function makeReviewNotes(paper) {
   const notes = [];
   const conceptText = paper.concepts.length ? paper.concepts.join(", ") : "the keywords and title";
 
-  notes.push(`Triage the research question and how it contributes to ${conceptText}.`);
-
-  if (paper.summary.length > 240) {
-    notes.push("Separate the abstract into problem, contribution, method, evidence, and conclusion.");
+  if (paper.fullText) {
+    notes.push(
+      `Full-text dossier extracted from ${paper.extraction?.pageCount || "unknown"} pages and ${Number(
+        paper.extraction?.characterCount || paper.fullText.length
+      ).toLocaleString()} characters.`
+    );
+    notes.push("Prioritize the extracted methods, results, conclusion, and limitations before making a research decision.");
   } else {
-    notes.push("Because the abstract is limited, open the source to verify the method, evidence, and contribution.");
+    notes.push(`Triage the research question and how it contributes to ${conceptText}.`);
+
+    if (paper.summary.length > 240) {
+      notes.push("Separate the abstract into problem, contribution, method, evidence, and conclusion.");
+    } else {
+      notes.push("Because the abstract is limited, open the source to verify the method, evidence, and contribution.");
+    }
   }
 
   notes.push(
@@ -1261,6 +1415,104 @@ function makeResearchDecisionGuide(paper) {
   };
 }
 
+function clippedSection(text, sentenceLimit = 8) {
+  return getSentences(text, sentenceLimit).join(" ") || cleanText(text, "").slice(0, 1200);
+}
+
+function makeFullTextProvenance(paper) {
+  if (!paper.fullText) return null;
+  const extraction = paper.extraction || {};
+  const sectionNames = Object.keys(paper.extractedSections || {});
+
+  return {
+    title: "Full-text ingestion provenance",
+    paragraphs: [
+      `This dossier is based on extracted PDF text, not only OpenAlex metadata. PaperTrail extracted ${Number(
+        extraction.characterCount || paper.fullText.length
+      ).toLocaleString()} characters across ${extraction.pageCount || "unknown"} pages from ${extraction.fileName || "the uploaded PDF"}.`,
+      "This first ingestion pipeline reads selectable PDF text. It does not yet perform OCR on scanned pages or vision-level interpretation of figures and tables.",
+    ],
+    bullets: [
+      `Detected sections: ${sectionNames.length ? sectionNames.join(", ") : "no formal headings detected"}.`,
+      "Verified from full text: section text, local claims, method/result/conclusion language present in the PDF text layer.",
+      "Still limited: figure semantics, table structure, scanned equations, supplementary files, and citation graph context.",
+    ],
+  };
+}
+
+function makeExtractedSectionDossier(paper) {
+  if (!paper.fullText) return null;
+  const sections = paper.extractedSections || {};
+  const bullets = [];
+
+  if (sections.abstract) {
+    bullets.push(`Abstract signal: ${clippedSection(sections.abstract, 5)}`);
+  }
+  if (sections.introduction) {
+    bullets.push(`Introduction and gap: ${clippedSection(sections.introduction, 6)}`);
+  }
+  if (sections.relatedWork) {
+    bullets.push(`Prior-work context: ${clippedSection(sections.relatedWork, 5)}`);
+  }
+  if (sections.methods) {
+    bullets.push(`Method architecture: ${clippedSection(sections.methods, 7)}`);
+  }
+  if (sections.results) {
+    bullets.push(`Results and evidence: ${clippedSection(sections.results, 7)}`);
+  }
+  if (sections.discussion) {
+    bullets.push(`Discussion interpretation: ${clippedSection(sections.discussion, 6)}`);
+  }
+  if (sections.limitations) {
+    bullets.push(`Limitations stated in text: ${clippedSection(sections.limitations, 6)}`);
+  }
+  if (sections.conclusion) {
+    bullets.push(`Conclusion signal: ${clippedSection(sections.conclusion, 6)}`);
+  }
+
+  return {
+    title: "Extracted full-text dossier",
+    paragraphs: [
+      "These notes are derived from detected paper sections in the uploaded PDF. Use them as the main dossier layer because they come from the paper body rather than abstract metadata.",
+    ],
+    bullets: bullets.length
+      ? bullets
+      : [
+          `PaperTrail extracted full text but did not detect conventional section headings. High-signal opening text: ${clippedSection(
+            paper.fullText,
+            10
+          )}`,
+        ],
+  };
+}
+
+function makeFullTextEvidenceAudit(paper) {
+  if (!paper.fullText) return null;
+  const sections = paper.extractedSections || {};
+  const methodText = sections.methods || "";
+  const resultText = sections.results || "";
+  const limitationText = sections.limitations || sections.discussion || "";
+
+  return {
+    title: "Full-text evidence audit",
+    paragraphs: [
+      "This audit uses the extracted body text to separate what the paper appears to do from what it appears to claim.",
+    ],
+    bullets: [
+      methodText
+        ? `Method evidence to inspect: ${clippedSection(methodText, 5)}`
+        : "Method evidence to inspect: no clearly labeled methods section was detected, so verify method details manually in the PDF.",
+      resultText
+        ? `Result evidence to inspect: ${clippedSection(resultText, 5)}`
+        : "Result evidence to inspect: no clearly labeled results section was detected, so identify tables, experiments, theorems, or evaluation paragraphs manually.",
+      limitationText
+        ? `Validity threats and caveats: ${clippedSection(limitationText, 5)}`
+        : "Validity threats and caveats: no limitations/discussion section was detected, so actively search the full paper for scope restrictions and assumptions.",
+      "Research judgment rule: treat a claim as strong only when the method, evidence, and stated limitations all support it.",
+    ],
+  };
+}
+
 function getShortSentences(paper, limit = 5) {
   const sentences = getSentences(paper.summary, limit);
   if (sentences.length) return sentences;
@@ -1429,7 +1681,164 @@ function shortPlanToText(plan) {
   ].join("\n");
 }
 
+function getVideoJobEndpoint(job = null) {
+  const config = getSupabaseConfig();
+  const baseUrl = `${config.url.replace(/\/$/, "")}/functions/v1/video-jobs`;
+  if (!job) return baseUrl;
+  const params = new URLSearchParams({
+    job_id: job.job_id,
+    token: job.public_token,
+  });
+  return `${baseUrl}?${params.toString()}`;
+}
+
+async function getVideoJobHeaders() {
+  const config = getSupabaseConfig();
+  const headers = {
+    "Content-Type": "application/json",
+    apikey: config.anonKey,
+  };
+
+  if (supabaseClient) {
+    const { data } = await supabaseClient.auth.getSession();
+    if (data.session?.access_token) {
+      headers.Authorization = `Bearer ${data.session.access_token}`;
+    }
+  }
+
+  return headers;
+}
+
+function getVideoJobStatusLabel(status) {
+  const labels = {
+    queued: "Queued for rendering",
+    rendering: "Rendering MP4",
+    completed: "Video ready",
+    failed: "Render failed",
+    canceled: "Canceled",
+  };
+  return labels[status] || "Preparing video job";
+}
+
+function renderVideoJobState(job) {
+  const existing = els.shortsOutput.querySelector(".video-job-card");
+  const card = existing || document.createElement("article");
+  card.className = "video-job-card";
+
+  const title = document.createElement("strong");
+  title.textContent = getVideoJobStatusLabel(job.status);
+  const details = document.createElement("p");
+  details.textContent = job.error
+    ? job.error
+    : job.status === "completed"
+      ? "The vertical research short is ready for download and platform review."
+      : "PaperTrail has stored the render package. A configured renderer worker will produce the MP4 and update this job.";
+
+  const actions = document.createElement("div");
+  actions.className = "export-actions";
+  if (job.preview_url) {
+    const preview = document.createElement("a");
+    preview.className = "button small";
+    preview.href = job.preview_url;
+    preview.target = "_blank";
+    preview.rel = "noreferrer";
+    preview.textContent = "Preview";
+    actions.append(preview);
+  }
+  if (job.video_url) {
+    const download = document.createElement("a");
+    download.className = "button small";
+    download.href = job.video_url;
+    download.target = "_blank";
+    download.rel = "noreferrer";
+    download.textContent = "Download MP4";
+    actions.append(download);
+  }
+
+  card.replaceChildren(title, details, actions);
+  if (!existing) {
+    els.shortsOutput.append(card);
+  }
+}
+
+async function pollVideoJob(job) {
+  if (!job?.job_id || !job?.public_token) return;
+  window.clearTimeout(videoJobPollTimer);
+
+  try {
+    const response = await fetch(getVideoJobEndpoint(job), {
+      headers: await getVideoJobHeaders(),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Could not load video job status.");
+    }
+
+    currentVideoJob = {
+      ...job,
+      ...data,
+      public_token: job.public_token,
+    };
+    saveStoredJson(VIDEO_JOB_STATE_KEY, currentVideoJob);
+    renderVideoJobState(currentVideoJob);
+
+    if (["queued", "rendering"].includes(currentVideoJob.status)) {
+      videoJobPollTimer = window.setTimeout(() => pollVideoJob(currentVideoJob), 8000);
+    } else if (currentVideoJob.status === "completed") {
+      els.shortsStatus.textContent = "Your vertical research short is ready.";
+      trackEvent("visual_short_video_completed", { job_id: currentVideoJob.job_id });
+    }
+  } catch (error) {
+    els.shortsStatus.textContent = error.message || "Video job status is unavailable.";
+  }
+}
+
+async function createVideoJobFromPlan(includeTts = false) {
+  if (!currentShortPlan) {
+    els.shortsStatus.textContent = "Generate a visual short storyboard before exporting video.";
+    return;
+  }
+
+  els.shortsStatus.textContent = includeTts
+    ? "Creating video render job with narration..."
+    : "Creating video render job...";
+
+  const response = await fetch(getVideoJobEndpoint(), {
+    method: "POST",
+    headers: await getVideoJobHeaders(),
+    body: JSON.stringify({
+      paper: currentShortPlan.paper,
+      abstract: currentShortPlan.paper.summary,
+      duration: currentShortPlan.duration,
+      scenePlan: {
+        hook: currentShortPlan.hook,
+        scenes: currentShortPlan.scenes,
+        notes: currentShortPlan.notes,
+      },
+      sessionId,
+      includeTts,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    els.shortsStatus.textContent = data.error || "Could not create video render job.";
+    return;
+  }
+
+  currentVideoJob = data;
+  saveStoredJson(VIDEO_JOB_STATE_KEY, currentVideoJob);
+  renderVideoJobState(currentVideoJob);
+  els.shortsStatus.textContent = `${getVideoJobStatusLabel(data.status)}.`;
+  trackEvent("visual_short_video_requested", {
+    job_id: data.job_id,
+    include_tts: includeTts,
+    duration: currentShortPlan.duration,
+  });
+  pollVideoJob(currentVideoJob);
+}
+
 function renderShortPlan(plan) {
+  currentShortPlan = plan;
   const wrapper = document.createElement("article");
   wrapper.className = "short-plan";
 
@@ -1484,6 +1893,17 @@ function renderShortPlan(plan) {
     }
   });
   actions.append(copyButton);
+  const videoButton = document.createElement("button");
+  videoButton.className = "button small primary";
+  videoButton.type = "button";
+  videoButton.textContent = "Export MP4";
+  videoButton.addEventListener("click", () => createVideoJobFromPlan(false));
+  const narratedVideoButton = document.createElement("button");
+  narratedVideoButton.className = "button small";
+  narratedVideoButton.type = "button";
+  narratedVideoButton.textContent = "Export MP4 + TTS";
+  narratedVideoButton.addEventListener("click", () => createVideoJobFromPlan(true));
+  actions.append(videoButton, narratedVideoButton);
 
   wrapper.append(header, scenes, notes, actions);
   els.shortsOutput.replaceChildren(wrapper);
@@ -1494,6 +1914,12 @@ function renderShortPlan(plan) {
     plan,
     updatedAt: Date.now(),
   });
+  if (currentVideoJob?.job_id) {
+    renderVideoJobState(currentVideoJob);
+    if (["queued", "rendering"].includes(currentVideoJob.status)) {
+      pollVideoJob(currentVideoJob);
+    }
+  }
   typesetMath(els.shortsOutput);
 }
 
@@ -1558,11 +1984,17 @@ function makeFullReview(paper) {
   const concepts = getConceptText(paper);
   const abstractSentences = getSentences(paper.summary, 5);
   const hasAbstract = !paper.summary.startsWith("OpenAlex does not include an abstract");
+  const fullTextSections = [
+    makeFullTextProvenance(paper),
+    makeExtractedSectionDossier(paper),
+    makeFullTextEvidenceAudit(paper),
+  ].filter(Boolean);
   const likelyQuestion =
     abstractSentences[0] ||
     `The paper appears to investigate a question in ${concepts}, but the available metadata is not enough to state the exact research question confidently.`;
 
   return [
+    ...fullTextSections,
     {
       title: "Executive intelligence brief",
       paragraphs: [
@@ -2093,7 +2525,12 @@ function renderPapers(container, papers, emptyMessage, options = {}) {
     renderRichText(card.querySelector("h3"), paper.title);
     renderRichText(card.querySelector(".authors"), paper.authors);
     renderExpandableSummary(card, paper);
-    card.querySelector(".paper-link").href = paper.url;
+    const paperLink = card.querySelector(".paper-link");
+    if (paper.url) {
+      paperLink.href = paper.url;
+    } else {
+      paperLink.remove();
+    }
 
     const relevanceBadge = card.querySelector(".relevance-badge");
     if (paper.relevance) {
@@ -2176,6 +2613,17 @@ function restoreDiscoveryViews() {
     );
   }
 
+  const lastIngestedPaper = loadStoredJson(INGEST_STATE_KEY);
+  if (lastIngestedPaper?.paper) {
+    const paper = normalizePaperMath(lastIngestedPaper.paper);
+    els.ingestStatus.textContent =
+      lastIngestedPaper.status || `Restored full-text dossier for "${paper.title}".`;
+    renderPapers(els.ingestResults, [paper], "No ingested paper yet.", {
+      hash: "#ingest",
+      source: "ingest",
+    });
+  }
+
   const lastShort = loadStoredJson(SHORTS_STATE_KEY);
   if (lastShort?.plan) {
     els.shortsTitle.value = lastShort.title || "";
@@ -2190,6 +2638,45 @@ function handleShorts(event) {
   event.preventDefault();
   if (!els.shortsForm.reportValidity()) return;
   generateShortForPaper(makeManualShortPaper(), { source: "manual" });
+}
+
+async function handleIngest(event) {
+  event.preventDefault();
+  if (!els.ingestForm.reportValidity()) return;
+
+  const file = els.paperPdfInput.files?.[0];
+  if (!file) return;
+
+  els.ingestStatus.textContent = `Extracting full text from "${file.name}"...`;
+  els.ingestResults.replaceChildren();
+
+  try {
+    const extraction = await extractPdfText(file);
+    if (extraction.text.length < 800) {
+      throw new Error(
+        "PaperTrail extracted very little text. This PDF may be scanned, image-based, or protected from text extraction."
+      );
+    }
+
+    const paper = paperFromPdfExtraction(file, extraction, els.paperTitleInput.value);
+    const status = `Full-text ingestion complete: extracted ${extraction.text.length.toLocaleString()} characters across ${
+      extraction.pageCount
+    } pages.`;
+    els.ingestStatus.textContent = status;
+    saveStoredJson(INGEST_STATE_KEY, { paper, status, updatedAt: Date.now() });
+    saveViewState({ hash: "#ingest", source: "ingest", paperId: paper.id, reviewOpen: true });
+    renderPapers(els.ingestResults, [paper], "No ingested paper yet.", {
+      hash: "#ingest",
+      source: "ingest",
+    });
+    await trackEvent("paper_pdf_ingested", {
+      page_count: extraction.pageCount,
+      character_count: extraction.text.length,
+    });
+    els.ingestResults.querySelector(".review-open-button")?.click();
+  } catch (error) {
+    els.ingestStatus.textContent = error.message || "PaperTrail could not ingest this PDF.";
+  }
 }
 
 async function handleSearch(event) {
@@ -2284,6 +2771,7 @@ async function handleRecommendations(event) {
 }
 
 els.searchForm.addEventListener("submit", handleSearch);
+els.ingestForm.addEventListener("submit", handleIngest);
 els.interestForm.addEventListener("submit", handleRecommendations);
 els.shortsForm.addEventListener("submit", handleShorts);
 els.authForm.addEventListener("submit", handleSignIn);

@@ -10,7 +10,7 @@
     >
     <link rel="preconnect" href="https://api.openalex.org">
     <link rel="preload" as="image" href="assets/quantum-hero.png">
-    <link rel="stylesheet" href="styles.css?v=20260622-research-workspace">
+    <link rel="stylesheet" href="styles.css?v=20260622-full-ingest">
   </head>
   <body>
     <header class="site-header">
@@ -21,6 +21,7 @@
         </a>
         <div class="nav-links">
           <a href="#search">Search</a>
+          <a href="#ingest">Ingest PDF</a>
           <a href="#recommendations">Recommendations</a>
           <a href="#visual-shorts">Visual shorts</a>
           <a href="#account">Account</a>
@@ -40,8 +41,8 @@
             limitations, citation context, and future research opportunities.
           </p>
           <div class="hero-actions">
-            <a class="button primary" href="#search">Search papers</a>
-            <a class="button ghost" href="#recommendations">Get recommendations</a>
+            <a class="button primary" href="#ingest">Ingest a full paper</a>
+            <a class="button ghost" href="#search">Search papers</a>
           </div>
           <div class="hero-stats" aria-label="PaperTrail capabilities">
             <span>Precise OpenAlex search</span>
@@ -81,6 +82,36 @@
             <p>Surface limitations, open questions, future research directions, and critique angles.</p>
           </div>
         </div>
+      </section>
+
+      <section id="ingest" class="section surface" aria-labelledby="ingest-title">
+        <div class="section-heading">
+          <h2 id="ingest-title">Full-paper ingestion</h2>
+          <p>
+            Upload a PDF to extract the paper text in your browser and generate a research dossier
+            from the actual paper, not only abstract metadata.
+          </p>
+        </div>
+        <form class="ingest-panel" id="ingest-form">
+          <label for="paper-pdf-input">Upload paper PDF</label>
+          <input id="paper-pdf-input" name="paperPdf" type="file" accept="application/pdf,.pdf" required>
+          <div class="input-row">
+            <input
+              id="paper-title-input"
+              name="paperTitle"
+              type="text"
+              placeholder="Optional title override"
+              autocomplete="off"
+            >
+            <button class="button primary" type="submit">Generate dossier</button>
+          </div>
+          <p class="form-note">
+            First-version ingestion extracts selectable PDF text. Scanned image-only PDFs, figures,
+            tables, and complex equations will need a future OCR/vision pipeline.
+          </p>
+        </form>
+        <div class="status" id="ingest-status" role="status" aria-live="polite"></div>
+        <div class="results-grid" id="ingest-results"></div>
       </section>
 
       <section id="search" class="section surface" aria-labelledby="search-title">
@@ -430,8 +461,9 @@
       };
     </script>
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=20260621"></script>
-    <script src="script.js?v=20260622-research-workspace" defer></script>
+    <script src="script.js?v=20260622-full-ingest" defer></script>
   </body>
 </html>
