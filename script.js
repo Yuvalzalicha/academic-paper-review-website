@@ -941,21 +941,70 @@ async function extractPdfText(file) {
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
-    const text = content.items
-      .map((item) => item.str)
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
+    const items = content.items
+      .map((item) => ({
+        text: item.str,
+        x: item.transform?.[4] || 0,
+        y: item.transform?.[5] || 0,
+        width: item.width || 0,
+        height: item.height || 0,
+        fontName: item.fontName || "",
+      }))
+      .filter((item) => cleanText(item.text, ""));
+    const lines = groupPdfItemsIntoLines(items);
+    const text = lines.map((line) => line.text).join("\n").trim();
     if (text) {
-      pages.push({ pageNumber, text });
+      pages.push({
+        pageNumber,
+        text,
+        characterCount: text.length,
+        itemCount: items.length,
+        lines: lines.slice(0, 140),
+      });
     }
   }
 
+  const fullText = normalizeMathText(pages.map((page) => page.text).join("\n\n"));
   return {
     pageCount: pdf.numPages,
-    text: normalizeMathText(pages.map((page) => page.text).join("\n\n")),
+    pagesWithText: pages.length,
+    emptyPageCount: Math.max(0, pdf.numPages - pages.length),
+    averageCharactersPerPage: pages.length
+      ? Math.round(pages.reduce((total, page) => total + page.characterCount, 0) / pages.length)
+      : 0,
+    text: fullText,
     pages,
   };
+}
+
+function groupPdfItemsIntoLines(items) {
+  const sortedItems = [...items].sort((a, b) => {
+    if (Math.abs(b.y - a.y) > 3) return b.y - a.y;
+    return a.x - b.x;
+  });
+  const lines = [];
+
+  sortedItems.forEach((item) => {
+    const line = lines.find((candidate) => Math.abs(candidate.y - item.y) <= 3);
+    if (line) {
+      line.items.push(item);
+      line.y = (line.y + item.y) / 2;
+      line.height = Math.max(line.height, item.height);
+    } else {
+      lines.push({ y: item.y, height: item.height, items: [item] });
+    }
+  });
+
+  return lines
+    .map((line) => {
+      const lineItems = line.items.sort((a, b) => a.x - b.x);
+      return {
+        text: normalizeMathText(lineItems.map((item) => item.text).join(" ").replace(/\s+/g, " ")),
+        y: Math.round(line.y),
+        height: Math.round(line.height),
+      };
+    })
+    .filter((line) => line.text);
 }
 
 function getSectionPatterns() {
@@ -1004,6 +1053,127 @@ function extractPaperSections(fullText) {
   return sections;
 }
 
+function extractMatches(text, pattern, limit = 12) {
+  const matches = [];
+  let match;
+  const regex = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
+  while ((match = regex.exec(text)) && matches.length < limit) {
+    matches.push(cleanText(match[0], ""));
+  }
+  return uniqueItems(matches);
+}
+
+function getSectionCoverage(sections) {
+  const expected = ["abstract", "introduction", "methods", "results", "discussion", "limitations", "conclusion", "references"];
+  const detected = expected.filter((key) => cleanText(sections[key] || "", "").length > 120);
+  return {
+    detected,
+    missing: expected.filter((key) => !detected.includes(key)),
+    score: Math.round((detected.length / expected.length) * 100),
+  };
+}
+
+function extractFigureTableIndex(text) {
+  const figureCaptions = extractMatches(
+    text,
+    /\b(?:Figure|Fig\.)\s+[A-Za-z0-9.:-]+\.?\s+[^.\n]*(?:\.[^.\n]*){0,2}/gi,
+    16
+  );
+  const tableCaptions = extractMatches(
+    text,
+    /\bTable\s+[A-Za-z0-9.:-]+\.?\s+[^.\n]*(?:\.[^.\n]*){0,2}/gi,
+    16
+  );
+  return {
+    figureCaptions,
+    tableCaptions,
+    figureCount: figureCaptions.length,
+    tableCount: tableCaptions.length,
+  };
+}
+
+function extractEquationSignals(pages) {
+  const mathSymbols = /[=<>≤≥≈≠∑∫√∂∇∞±×⊗⊕→←↦∈∀∃λθμσαβγδπ]|\b(?:argmax|argmin|log|exp|Pr|Var|Cov|Tr)\b/;
+  const equationLines = [];
+
+  pages.forEach((page) => {
+    (page.lines || []).forEach((line) => {
+      const text = cleanText(line.text, "");
+      const symbolHits = (text.match(/[=<>≤≥≈≠∑∫√∂∇∞±×⊗⊕→←↦∈∀∃λθμσ]/g) || []).length;
+      const isEquationLike =
+        text.length >= 8 &&
+        text.length <= 220 &&
+        mathSymbols.test(text) &&
+        (symbolHits >= 2 || /(?:\^|_|\\|frac|sum|theta|lambda|operatorname)/i.test(text));
+      if (isEquationLike) {
+        equationLines.push(`p.${page.pageNumber}: ${normalizeMathText(text)}`);
+      }
+    });
+  });
+
+  return uniqueItems(equationLines).slice(0, 18);
+}
+
+function extractCitationIndex(text, sections) {
+  const bracketCitations = extractMatches(text, /\[[0-9,\s-]{1,24}\]/g, 18);
+  const authorYearCitations = extractMatches(
+    text,
+    /\b[A-Z][A-Za-z-]+(?:\s+et\s+al\.)?\s*\((?:19|20)\d{2}[a-z]?\)/g,
+    18
+  );
+  const referenceText = sections.references || "";
+  const referenceEntries = referenceText
+    .split(/\n|(?=\[\d+\])|(?=\b[A-Z][A-Za-z-]+,\s+[A-Z]\.)/)
+    .map((entry) => cleanText(entry, ""))
+    .filter((entry) => entry.length > 40)
+    .slice(0, 12);
+
+  return {
+    bracketCitations,
+    authorYearCitations,
+    referenceEntries,
+    citationStyle: bracketCitations.length
+      ? "numeric bracket citations"
+      : authorYearCitations.length
+        ? "author-year citations"
+        : "citation style not confidently detected",
+  };
+}
+
+function makeIngestionDiagnostics(extraction, sections) {
+  const coverage = getSectionCoverage(sections);
+  const textDensity =
+    extraction.pageCount > 0 ? Math.round((extraction.text.length / extraction.pageCount) * 10) / 10 : 0;
+  const scannedRisk =
+    extraction.pagesWithText === 0 ||
+    extraction.averageCharactersPerPage < 300 ||
+    extraction.emptyPageCount / Math.max(extraction.pageCount, 1) > 0.35;
+
+  return {
+    textDensity,
+    sectionCoverage: coverage,
+    scannedRisk,
+    qualityLabel: scannedRisk
+      ? "low text-layer confidence"
+      : coverage.score >= 60
+        ? "strong structured text layer"
+        : "usable text layer with weak heading detection",
+    warnings: [
+      scannedRisk ? "The PDF may be scanned, image-heavy, or protected from extraction." : "",
+      coverage.missing.length ? `Missing or weak section detection: ${coverage.missing.join(", ")}.` : "",
+    ].filter(Boolean),
+  };
+}
+
+function analyzePdfStructure(extraction, sections) {
+  return {
+    diagnostics: makeIngestionDiagnostics(extraction, sections),
+    visualIndex: extractFigureTableIndex(extraction.text),
+    equationSignals: extractEquationSignals(extraction.pages || []),
+    citationIndex: extractCitationIndex(extraction.text, sections),
+  };
+}
+
 function getLikelyTitleFromPdf(fileName, fullText) {
   const firstLines = fullText
     .split(/\n|\.\s/)
@@ -1014,6 +1184,7 @@ function getLikelyTitleFromPdf(fileName, fullText) {
 
 function paperFromPdfExtraction(file, extraction, titleOverride = "") {
   const sections = extractPaperSections(extraction.text);
+  const structure = analyzePdfStructure(extraction, sections);
   const title = cleanText(titleOverride, "") || getLikelyTitleFromPdf(file.name, extraction.text);
   const summary = sections.abstract || getSentences(extraction.text, 8).join(" ");
   const concepts = uniqueItems(
@@ -1038,10 +1209,14 @@ function paperFromPdfExtraction(file, extraction, titleOverride = "") {
     concepts: concepts.length ? concepts : ["Full-text paper"],
     fullText: extraction.text,
     extractedSections: sections,
+    extractedStructure: structure,
     extraction: {
       source: "uploaded-pdf",
       fileName: file.name,
       pageCount: extraction.pageCount,
+      pagesWithText: extraction.pagesWithText,
+      emptyPageCount: extraction.emptyPageCount,
+      averageCharactersPerPage: extraction.averageCharactersPerPage,
       characterCount: extraction.text.length,
       extractedAt: new Date().toISOString(),
     },
@@ -1423,19 +1598,25 @@ function makeFullTextProvenance(paper) {
   if (!paper.fullText) return null;
   const extraction = paper.extraction || {};
   const sectionNames = Object.keys(paper.extractedSections || {});
+  const diagnostics = paper.extractedStructure?.diagnostics;
 
   return {
     title: "Full-text ingestion provenance",
     paragraphs: [
       `This dossier is based on extracted PDF text, not only OpenAlex metadata. PaperTrail extracted ${Number(
         extraction.characterCount || paper.fullText.length
-      ).toLocaleString()} characters across ${extraction.pageCount || "unknown"} pages from ${extraction.fileName || "the uploaded PDF"}.`,
-      "This first ingestion pipeline reads selectable PDF text. It does not yet perform OCR on scanned pages or vision-level interpretation of figures and tables.",
+      ).toLocaleString()} characters across ${extraction.pageCount || "unknown"} pages from ${
+        extraction.fileName || "the uploaded PDF"
+      }.`,
+      diagnostics
+        ? `Layer-2 ingestion quality: ${diagnostics.qualityLabel}. The extracted text density is ${diagnostics.textDensity.toLocaleString()} characters per page, with ${diagnostics.sectionCoverage.score}% expected-section coverage.`
+        : "Layer-2 ingestion quality could not be computed for this paper.",
     ],
     bullets: [
       `Detected sections: ${sectionNames.length ? sectionNames.join(", ") : "no formal headings detected"}.`,
-      "Verified from full text: section text, local claims, method/result/conclusion language present in the PDF text layer.",
-      "Still limited: figure semantics, table structure, scanned equations, supplementary files, and citation graph context.",
+      `Pages with extractable text: ${extraction.pagesWithText || "unknown"} of ${extraction.pageCount || "unknown"}.`,
+      ...(diagnostics?.warnings?.length ? diagnostics.warnings : ["No major text-layer warning was detected."]),
+      "Still limited: this browser layer detects captions, equation-like lines, and citation patterns, but it does not yet perform OCR or true figure/table vision reasoning.",
     ],
   };
 }
@@ -1510,6 +1691,98 @@ function makeFullTextEvidenceAudit(paper) {
         : "Validity threats and caveats: no limitations/discussion section was detected, so actively search the full paper for scope restrictions and assumptions.",
       "Research judgment rule: treat a claim as strong only when the method, evidence, and stated limitations all support it.",
     ],
+  };
+}
+
+function makeStructuredIngestionMap(paper) {
+  if (!paper.fullText) return null;
+  const structure = paper.extractedStructure || {};
+  const diagnostics = structure.diagnostics || {};
+  const coverage = diagnostics.sectionCoverage || {};
+
+  return {
+    title: "Structured ingestion map",
+    paragraphs: [
+      "This section summarizes what PaperTrail could structurally recover from the PDF before interpretation. It is the quality-control layer that tells a researcher how much of the dossier is grounded in the paper body.",
+    ],
+    bullets: [
+      `Extraction confidence: ${diagnostics.qualityLabel || "not scored"}.`,
+      `Expected sections detected: ${(coverage.detected || []).join(", ") || "none confidently detected"}.`,
+      `Expected sections missing or weak: ${(coverage.missing || []).join(", ") || "none"}.`,
+      `Figures detected from captions: ${structure.visualIndex?.figureCount || 0}.`,
+      `Tables detected from captions: ${structure.visualIndex?.tableCount || 0}.`,
+      `Equation-like lines detected: ${(structure.equationSignals || []).length}.`,
+      `Citation style: ${structure.citationIndex?.citationStyle || "not detected"}.`,
+    ],
+  };
+}
+
+function makeVisualEvidenceIndex(paper) {
+  if (!paper.fullText) return null;
+  const visualIndex = paper.extractedStructure?.visualIndex || {};
+  const figureCaptions = visualIndex.figureCaptions || [];
+  const tableCaptions = visualIndex.tableCaptions || [];
+
+  return {
+    title: "Figure and table evidence index",
+    paragraphs: [
+      figureCaptions.length || tableCaptions.length
+        ? "PaperTrail found explicit figure/table captions in the extracted text. Treat these as the evidence objects that likely carry the paper's main empirical, theoretical, or experimental support."
+        : "No explicit figure or table captions were detected in the PDF text layer. The paper may have captions embedded as images, unusual formatting, or weak PDF text extraction.",
+    ],
+    bullets: [
+      ...figureCaptions.slice(0, 8).map((caption) => `Figure signal: ${caption}`),
+      ...tableCaptions.slice(0, 8).map((caption) => `Table signal: ${caption}`),
+      ...(figureCaptions.length || tableCaptions.length
+        ? ["Research audit: connect each caption to the claim it supports, then check whether the surrounding results text makes a stronger claim than the visual evidence justifies."]
+        : ["Research audit: inspect the original PDF visually for figures and tables because the text layer did not expose them."]),
+    ],
+  };
+}
+
+function makeEquationAndNotationIndex(paper) {
+  if (!paper.fullText) return null;
+  const equationSignals = paper.extractedStructure?.equationSignals || [];
+
+  return {
+    title: "Equation and notation index",
+    paragraphs: [
+      equationSignals.length
+        ? "These are equation-like lines recovered from the PDF text layer. They are not guaranteed to preserve perfect mathematical layout, but they identify where the paper's formal machinery probably lives."
+        : "No strong equation-like lines were detected. The paper may be non-mathematical, or its equations may be embedded in a way the browser text layer cannot recover.",
+    ],
+    bullets: equationSignals.length
+      ? [
+          ...equationSignals.slice(0, 12),
+          "Research audit: for each equation, classify it as a definition, assumption, model, objective, constraint, estimator, theorem, metric, or result.",
+        ]
+      : [
+          "Research audit: if the paper is technical, inspect the PDF for equations manually; this ingestion layer may have missed visual equation objects.",
+        ],
+  };
+}
+
+function makeCitationAndReferenceIndex(paper) {
+  if (!paper.fullText) return null;
+  const citationIndex = paper.extractedStructure?.citationIndex || {};
+  const bracketCitations = citationIndex.bracketCitations || [];
+  const authorYearCitations = citationIndex.authorYearCitations || [];
+  const referenceEntries = citationIndex.referenceEntries || [];
+
+  return {
+    title: "Citation and reference index",
+    paragraphs: [
+      "This section gives a first map of the paper's scholarly dependencies from the PDF text itself. It helps separate the paper's own contribution from the literature it leans on.",
+    ],
+    bullets: [
+      `Detected citation style: ${citationIndex.citationStyle || "not detected"}.`,
+      bracketCitations.length ? `Numeric citation samples: ${bracketCitations.slice(0, 12).join(", ")}.` : "",
+      authorYearCitations.length ? `Author-year citation samples: ${authorYearCitations.slice(0, 8).join(", ")}.` : "",
+      ...referenceEntries.slice(0, 6).map((entry) => `Reference signal: ${entry}`),
+      referenceEntries.length
+        ? "Research audit: identify which references are foundations, baselines, competing approaches, datasets, methods, and critiques."
+        : "Research audit: references were not cleanly extracted; inspect the references section manually if citation context matters.",
+    ].filter(Boolean),
   };
 }
 
@@ -1986,8 +2259,12 @@ function makeFullReview(paper) {
   const hasAbstract = !paper.summary.startsWith("OpenAlex does not include an abstract");
   const fullTextSections = [
     makeFullTextProvenance(paper),
+    makeStructuredIngestionMap(paper),
     makeExtractedSectionDossier(paper),
     makeFullTextEvidenceAudit(paper),
+    makeVisualEvidenceIndex(paper),
+    makeEquationAndNotationIndex(paper),
+    makeCitationAndReferenceIndex(paper),
   ].filter(Boolean);
   const likelyQuestion =
     abstractSentences[0] ||
@@ -2659,7 +2936,8 @@ async function handleIngest(event) {
     }
 
     const paper = paperFromPdfExtraction(file, extraction, els.paperTitleInput.value);
-    const status = `Full-text ingestion complete: extracted ${extraction.text.length.toLocaleString()} characters across ${
+    const quality = paper.extractedStructure?.diagnostics?.qualityLabel || "structured extraction complete";
+    const status = `Layer-2 ingestion complete: ${quality}; extracted ${extraction.text.length.toLocaleString()} characters across ${
       extraction.pageCount
     } pages.`;
     els.ingestStatus.textContent = status;

@@ -10,7 +10,7 @@
     >
     <link rel="preconnect" href="https://api.openalex.org">
     <link rel="preload" as="image" href="assets/quantum-hero.png">
-    <link rel="stylesheet" href="styles.css?v=20260622-full-ingest">
+    <link rel="stylesheet" href="styles.css?v=20260623-layer2-ingest">
   </head>
   <body>
     <header class="site-header">
@@ -106,8 +106,8 @@
             <button class="button primary" type="submit">Generate dossier</button>
           </div>
           <p class="form-note">
-            First-version ingestion extracts selectable PDF text. Scanned image-only PDFs, figures,
-            tables, and complex equations will need a future OCR/vision pipeline.
+            Layer-2 ingestion extracts structured text, section signals, captions, equation-like
+            lines, and citation patterns. Scanned image-only PDFs still need OCR/vision support.
           </p>
         </form>
         <div class="status" id="ingest-status" role="status" aria-live="polite"></div>
@@ -464,6 +464,6 @@
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=20260621"></script>
-    <script src="script.js?v=20260622-full-ingest" defer></script>
+    <script src="script.js?v=20260623-layer2-ingest" defer></script>
   </body>
 </html>
