@@ -1223,6 +1223,58 @@ function paperFromPdfExtraction(file, extraction, titleOverride = "") {
   });
 }
 
+function paperFromRemotePdf(basePaper, extraction, pdfUrl) {
+  const sections = extractPaperSections(extraction.text);
+  const structure = analyzePdfStructure(extraction, sections);
+  const summary = sections.abstract || basePaper.summary || getSentences(extraction.text, 8).join(" ");
+
+  return normalizePaperMath({
+    ...basePaper,
+    id: `${basePaper.id}:full-text`,
+    type: "full-text PDF",
+    source: `${basePaper.source} / full text`,
+    summary: summary || "PaperTrail extracted full text from this paper, but could not identify a clean abstract.",
+    isOpenAccess: true,
+    fullText: extraction.text,
+    extractedSections: sections,
+    extractedStructure: structure,
+    extraction: {
+      source: "openalex-pdf-url",
+      pdfUrl,
+      pageCount: extraction.pageCount,
+      pagesWithText: extraction.pagesWithText,
+      emptyPageCount: extraction.emptyPageCount,
+      averageCharactersPerPage: extraction.averageCharactersPerPage,
+      characterCount: extraction.text.length,
+      extractedAt: new Date().toISOString(),
+    },
+  });
+}
+
+async function extractRemotePdfText(pdfUrl) {
+  const response = await fetch(pdfUrl);
+  if (!response.ok) {
+    throw new Error(`The full-text PDF could not be downloaded (${response.status}).`);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  const blob = await response.blob();
+  const fileName = pdfUrl.split("/").pop()?.split("?")[0] || "openalex-full-text.pdf";
+  const file = new File([blob], fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`, {
+    type: contentType.includes("pdf") ? contentType : "application/pdf",
+    lastModified: Date.now(),
+  });
+  return extractPdfText(file);
+}
+
+function getBestPdfUrl(work) {
+  const locations = [work.best_oa_location, work.primary_location, ...(work.locations || [])].filter(Boolean);
+  const pdfUrl =
+    locations.find((location) => location.pdf_url)?.pdf_url ||
+    (work.open_access?.oa_url?.endsWith(".pdf") ? work.open_access.oa_url : "");
+  return pdfUrl || "";
+}
+
 function parseSearchQuery(query) {
   const normalized = cleanText(query, "");
   const phrases = [...normalized.matchAll(/"([^"]+)"/g)]
@@ -1365,6 +1417,7 @@ function paperFromWork(work) {
     url: work.doi ? `https://doi.org/${work.doi.replace("https://doi.org/", "")}` : work.id,
     citedByCount: work.cited_by_count || 0,
     isOpenAccess: Boolean(work.open_access?.is_oa),
+    pdfUrl: getBestPdfUrl(work),
     language: work.language || "unknown",
     concepts,
   });
@@ -2830,6 +2883,16 @@ function renderPapers(container, papers, emptyMessage, options = {}) {
       openReviewReader(paper, { hash: options.hash || "#search", source });
     });
 
+    const ingestButton = card.querySelector(".ingest-paper-button");
+    if (paper.fullText) {
+      ingestButton.textContent = "Full text ingested";
+      ingestButton.disabled = true;
+    } else if (paper.pdfUrl) {
+      ingestButton.addEventListener("click", () => handleRemoteIngest(paper, ingestButton));
+    } else {
+      ingestButton.remove();
+    }
+
     card.querySelector(".short-button").addEventListener("click", () => {
       generateShortForPaper(paper, { source });
       document.querySelector("#visual-shorts")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2917,6 +2980,26 @@ function handleShorts(event) {
   generateShortForPaper(makeManualShortPaper(), { source: "manual" });
 }
 
+async function finishFullTextIngestion(paper, extraction, trackingPayload = {}) {
+  const quality = paper.extractedStructure?.diagnostics?.qualityLabel || "structured extraction complete";
+  const status = `Layer-2 ingestion complete: ${quality}; extracted ${extraction.text.length.toLocaleString()} characters across ${
+    extraction.pageCount
+  } pages.`;
+  els.ingestStatus.textContent = status;
+  saveStoredJson(INGEST_STATE_KEY, { paper, status, updatedAt: Date.now() });
+  saveViewState({ hash: "#ingest", source: "ingest", paperId: paper.id, reviewOpen: true });
+  renderPapers(els.ingestResults, [paper], "No ingested paper yet.", {
+    hash: "#ingest",
+    source: "ingest",
+  });
+  await trackEvent("paper_pdf_ingested", {
+    page_count: extraction.pageCount,
+    character_count: extraction.text.length,
+    ...trackingPayload,
+  });
+  els.ingestResults.querySelector(".review-open-button")?.click();
+}
+
 async function handleIngest(event) {
   event.preventDefault();
   if (!els.ingestForm.reportValidity()) return;
@@ -2936,24 +3019,45 @@ async function handleIngest(event) {
     }
 
     const paper = paperFromPdfExtraction(file, extraction, els.paperTitleInput.value);
-    const quality = paper.extractedStructure?.diagnostics?.qualityLabel || "structured extraction complete";
-    const status = `Layer-2 ingestion complete: ${quality}; extracted ${extraction.text.length.toLocaleString()} characters across ${
-      extraction.pageCount
-    } pages.`;
-    els.ingestStatus.textContent = status;
-    saveStoredJson(INGEST_STATE_KEY, { paper, status, updatedAt: Date.now() });
-    saveViewState({ hash: "#ingest", source: "ingest", paperId: paper.id, reviewOpen: true });
-    renderPapers(els.ingestResults, [paper], "No ingested paper yet.", {
-      hash: "#ingest",
-      source: "ingest",
-    });
-    await trackEvent("paper_pdf_ingested", {
-      page_count: extraction.pageCount,
-      character_count: extraction.text.length,
-    });
-    els.ingestResults.querySelector(".review-open-button")?.click();
+    await finishFullTextIngestion(paper, extraction, { source: "upload" });
   } catch (error) {
     els.ingestStatus.textContent = error.message || "PaperTrail could not ingest this PDF.";
+  }
+}
+
+async function handleRemoteIngest(paper, button) {
+  if (!paper.pdfUrl) return;
+
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Ingesting...";
+  els.ingestStatus.textContent = `Downloading open-access PDF for "${paper.title}"...`;
+  els.ingestResults.replaceChildren();
+  document.querySelector("#ingest")?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  try {
+    const extraction = await extractRemotePdfText(paper.pdfUrl);
+    if (extraction.text.length < 800) {
+      throw new Error(
+        "PaperTrail found the PDF, but extracted very little text. It may be scanned, image-based, or protected from extraction."
+      );
+    }
+    const fullTextPaper = paperFromRemotePdf(paper, extraction, paper.pdfUrl);
+    await finishFullTextIngestion(fullTextPaper, extraction, {
+      source: "openalex_pdf_url",
+      paper_id: paper.id,
+    });
+  } catch (error) {
+    const message = error.message || "";
+    els.ingestStatus.textContent =
+      message === "Failed to fetch"
+        ? "PaperTrail found an open-access PDF link, but the publisher blocked direct browser ingestion. Download the PDF from the paper page and upload it here, or add the backend ingestion proxy next."
+        : message ||
+          "PaperTrail could not ingest this paper directly. Download the PDF from the publisher and upload it here instead.";
+    await trackEvent("paper_pdf_ingest_failed", { source: "openalex_pdf_url", paper_id: paper.id });
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
   }
 }
 
