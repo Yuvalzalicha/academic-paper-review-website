@@ -2050,6 +2050,7 @@ function renderVideoJobState(job) {
   const existing = els.shortsOutput.querySelector(".video-job-card");
   const card = existing || document.createElement("article");
   card.className = "video-job-card";
+  const streamUrl = job.preview_url || job.video_url;
 
   const title = document.createElement("strong");
   title.textContent = getVideoJobStatusLabel(job.status);
@@ -2057,8 +2058,20 @@ function renderVideoJobState(job) {
   details.textContent = job.error
     ? job.error
     : job.status === "completed"
-      ? "The vertical research short is ready for download and platform review."
+      ? "The vertical research short is ready to stream, review, and download."
       : "PaperTrail has stored the render package. A configured renderer worker will produce the MP4 and update this job.";
+
+  const media = document.createElement("div");
+  media.className = "video-stream-frame";
+  if (streamUrl) {
+    const video = document.createElement("video");
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    video.src = streamUrl;
+    video.setAttribute("aria-label", "Stream generated PaperTrail research short");
+    media.append(video);
+  }
 
   const actions = document.createElement("div");
   actions.className = "export-actions";
@@ -2081,7 +2094,11 @@ function renderVideoJobState(job) {
     actions.append(download);
   }
 
-  card.replaceChildren(title, details, actions);
+  card.replaceChildren(title, details);
+  if (streamUrl) {
+    card.append(media);
+  }
+  card.append(actions);
   if (!existing) {
     els.shortsOutput.append(card);
   }
