@@ -110,6 +110,7 @@ let viewRestoreQueued = true;
 let currentShortPlan = null;
 let currentVideoJob = loadStoredJson(VIDEO_JOB_STATE_KEY);
 let videoJobPollTimer = null;
+let localVideoObjectUrl = null;
 
 function getSessionId() {
   let sessionId = localStorage.getItem(SESSION_KEY);
@@ -2088,9 +2089,13 @@ function renderVideoJobState(job) {
     const download = document.createElement("a");
     download.className = "button small";
     download.href = job.video_url;
-    download.target = "_blank";
-    download.rel = "noreferrer";
-    download.textContent = "Download MP4";
+    if (job.local_filename) {
+      download.download = job.local_filename;
+    } else {
+      download.target = "_blank";
+      download.rel = "noreferrer";
+    }
+    download.textContent = job.video_format === "webm" ? "Download WebM" : "Download MP4";
     actions.append(download);
   }
 
@@ -2104,17 +2109,276 @@ function renderVideoJobState(job) {
   }
 }
 
+function parseShortSceneTiming(scene, index, sceneCount, duration) {
+  const match = String(scene.time || "").match(/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)s$/);
+  if (match) {
+    return { start: Number(match[1]), end: Number(match[2]) };
+  }
+  const sceneDuration = duration / Math.max(sceneCount, 1);
+  return {
+    start: index * sceneDuration,
+    end: (index + 1) * sceneDuration,
+  };
+}
+
+function wrapCanvasText(context, text, maxWidth) {
+  const words = cleanText(text, "").split(" ");
+  const lines = [];
+  let line = "";
+
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (context.measureText(candidate).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  });
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawShortFrame(context, canvas, plan, elapsedSeconds) {
+  const width = canvas.width;
+  const height = canvas.height;
+  const duration = Number(plan.duration) || 60;
+  const scenes = plan.scenes || [];
+  const activeIndex = Math.max(
+    0,
+    scenes.findIndex((scene, index) => {
+      const timing = parseShortSceneTiming(scene, index, scenes.length, duration);
+      return elapsedSeconds >= timing.start && elapsedSeconds < timing.end;
+    })
+  );
+  const scene = scenes[activeIndex] || scenes[0] || {};
+  const timing = parseShortSceneTiming(scene, activeIndex, scenes.length, duration);
+  const progress = Math.max(0, Math.min(1, (elapsedSeconds - timing.start) / Math.max(timing.end - timing.start, 1)));
+  const accentColors = ["#58e6ff", "#ffcf70", "#9d7cff"];
+  const accent = accentColors[activeIndex % accentColors.length];
+
+  const background = context.createLinearGradient(0, 0, 0, height);
+  background.addColorStop(0, "#050914");
+  background.addColorStop(0.55, "#0b1426");
+  background.addColorStop(1, "#050914");
+  context.fillStyle = background;
+  context.fillRect(0, 0, width, height);
+
+  context.globalAlpha = 0.16;
+  context.strokeStyle = "#9edbff";
+  context.lineWidth = 1;
+  const grid = 56;
+  for (let x = 0; x <= width; x += grid) {
+    context.beginPath();
+    context.moveTo(x, 0);
+    context.lineTo(x, height);
+    context.stroke();
+  }
+  for (let y = 0; y <= height; y += grid) {
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(width, y);
+    context.stroke();
+  }
+  context.globalAlpha = 1;
+
+  context.fillStyle = accent;
+  context.fillRect(54, 58, 58, 58);
+  context.fillStyle = "#04101a";
+  context.font = "800 18px system-ui, sans-serif";
+  context.textAlign = "center";
+  context.fillText("PT", 83, 94);
+
+  context.textAlign = "left";
+  context.fillStyle = "#9eb3c7";
+  context.font = "700 18px system-ui, sans-serif";
+  context.fillText("PAPERTRAIL RESEARCH SHORT", 130, 94);
+
+  context.fillStyle = accent;
+  context.font = "800 20px system-ui, sans-serif";
+  context.fillText(`${cleanText(scene.label, "Research intelligence")} / ${Math.round(elapsedSeconds)}s`, 58, 185);
+
+  context.fillStyle = "#f4fbff";
+  context.font = "800 42px system-ui, sans-serif";
+  const narrationLines = wrapCanvasText(context, scene.narration || plan.hook || plan.paper.title, width - 116).slice(0, 6);
+  narrationLines.forEach((line, index) => {
+    context.fillText(line, 58, 245 + index * 50);
+  });
+
+  const diagramTop = 565;
+  const diagramHeight = 520;
+  context.fillStyle = "rgba(9, 18, 34, 0.86)";
+  context.strokeStyle = "rgba(158, 219, 255, 0.28)";
+  context.lineWidth = 2;
+  context.fillRect(58, diagramTop, width - 116, diagramHeight);
+  context.strokeRect(58, diagramTop, width - 116, diagramHeight);
+
+  const pulse = 0.75 + Math.sin(progress * Math.PI) * 0.25;
+  const nodes = [
+    [160, diagramTop + 140, 48],
+    [390, diagramTop + 245, 34],
+    [690, diagramTop + 175, 42],
+    [835, diagramTop + 375, 28],
+  ];
+  context.strokeStyle = accent;
+  context.lineWidth = 5;
+  context.globalAlpha = 0.72;
+  context.beginPath();
+  context.moveTo(nodes[0][0], nodes[0][1]);
+  nodes.slice(1).forEach(([x, y]) => context.lineTo(x, y));
+  context.stroke();
+  context.globalAlpha = 1;
+  nodes.forEach(([x, y, radius], index) => {
+    context.beginPath();
+    context.fillStyle = index === activeIndex % nodes.length ? "#f4fbff" : accent;
+    context.arc(x, y, radius * pulse, 0, Math.PI * 2);
+    context.fill();
+  });
+
+  context.fillStyle = "#9eb3c7";
+  context.font = "500 25px system-ui, sans-serif";
+  const visualLines = wrapCanvasText(context, scene.visual || "", width - 116).slice(0, 4);
+  visualLines.forEach((line, index) => {
+    context.fillText(line, 58, 1150 + index * 34);
+  });
+
+  const caption = cleanText(scene.narration, "");
+  context.fillStyle = "rgba(5, 9, 20, 0.88)";
+  context.fillRect(45, height - 325, width - 90, 225);
+  context.strokeStyle = "rgba(158, 219, 255, 0.24)";
+  context.strokeRect(45, height - 325, width - 90, 225);
+  context.fillStyle = "#f4fbff";
+  context.font = "700 29px system-ui, sans-serif";
+  const captionLines = wrapCanvasText(context, caption, width - 150).slice(0, 5);
+  captionLines.forEach((line, index) => {
+    context.fillText(line, 75, height - 260 + index * 38);
+  });
+
+  context.fillStyle = "rgba(255,255,255,0.12)";
+  context.fillRect(45, height - 62, width - 90, 8);
+  context.fillStyle = accent;
+  context.fillRect(45, height - 62, (width - 90) * Math.min(1, elapsedSeconds / duration), 8);
+}
+
+function getSupportedVideoMimeType() {
+  const candidates = [
+    'video/mp4;codecs="avc1.42E01E"',
+    "video/mp4",
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm",
+  ];
+  return candidates.find((type) => window.MediaRecorder?.isTypeSupported(type)) || "";
+}
+
+async function renderShortVideoInBrowser(plan, job) {
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
+    throw new Error("This browser cannot render video locally. Try current Chrome or Safari.");
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 540;
+  canvas.height = 960;
+  const context = canvas.getContext("2d");
+  const stream = canvas.captureStream(30);
+  const mimeType = getSupportedVideoMimeType();
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType, videoBitsPerSecond: 5_000_000 } : undefined);
+  const chunks = [];
+  const duration = Number(plan.duration) || 60;
+
+  recorder.addEventListener("dataavailable", (event) => {
+    if (event.data.size) chunks.push(event.data);
+  });
+
+  const completed = new Promise((resolve, reject) => {
+    recorder.addEventListener("stop", resolve, { once: true });
+    recorder.addEventListener("error", () => reject(new Error("The browser video encoder failed.")), { once: true });
+  });
+
+  recorder.start(1000);
+  const startedAt = performance.now();
+
+  await new Promise((resolve) => {
+    const draw = (now) => {
+      const elapsed = Math.min(duration, (now - startedAt) / 1000);
+      drawShortFrame(context, canvas, plan, elapsed);
+      const percent = Math.min(100, Math.round((elapsed / duration) * 100));
+      currentVideoJob = { ...job, status: "rendering", error: null };
+      renderVideoJobState(currentVideoJob);
+      els.shortsStatus.textContent = `Rendering video in this browser: ${percent}%`;
+      if (elapsed >= duration) {
+        resolve();
+        return;
+      }
+      window.requestAnimationFrame(draw);
+    };
+    window.requestAnimationFrame(draw);
+  });
+
+  recorder.stop();
+  await completed;
+  stream.getTracks().forEach((track) => track.stop());
+
+  const outputType = recorder.mimeType || mimeType || "video/webm";
+  const blob = new Blob(chunks, { type: outputType });
+  if (!blob.size) throw new Error("The browser created an empty video file.");
+  if (localVideoObjectUrl) URL.revokeObjectURL(localVideoObjectUrl);
+  localVideoObjectUrl = URL.createObjectURL(blob);
+  const format = outputType.includes("mp4") ? "mp4" : "webm";
+  const filename = `${slugifyTitle(plan.paper.title)}-research-short.${format}`;
+
+  currentVideoJob = {
+    ...job,
+    status: "completed",
+    preview_url: localVideoObjectUrl,
+    video_url: localVideoObjectUrl,
+    video_format: format,
+    local_filename: filename,
+    error: null,
+  };
+  localStorage.removeItem(VIDEO_JOB_STATE_KEY);
+  renderVideoJobState(currentVideoJob);
+  els.shortsStatus.textContent =
+    format === "mp4"
+      ? "Video ready to stream and download as MP4."
+      : "Video ready to stream and download as WebM. MP4 encoding requires the cloud renderer.";
+  return currentVideoJob;
+}
+
 async function pollVideoJob(job) {
   if (!job?.job_id || !job?.public_token) return;
   window.clearTimeout(videoJobPollTimer);
 
   try {
-    const response = await fetch(getVideoJobEndpoint(job), {
-      headers: await getVideoJobHeaders(),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || "Could not load video job status.");
+    let data = null;
+    if (supabaseClient && currentUser) {
+      const result = await supabaseClient
+        .from("video_jobs")
+        .select("id,status,preview_url,video_url,audio_url,error_message,created_at,updated_at,completed_at,render_manifest")
+        .eq("id", job.job_id)
+        .maybeSingle();
+      if (result.error) throw result.error;
+      if (!result.data) throw new Error("Video job not found.");
+      data = {
+        job_id: result.data.id,
+        status: result.data.status,
+        preview_url: result.data.preview_url,
+        video_url: result.data.video_url,
+        audio_url: result.data.audio_url,
+        error: result.data.error_message,
+        created_at: result.data.created_at,
+        updated_at: result.data.updated_at,
+        completed_at: result.data.completed_at,
+        render_manifest: result.data.render_manifest,
+      };
+    } else {
+      const response = await fetch(getVideoJobEndpoint(job), {
+        headers: await getVideoJobHeaders(),
+      });
+      data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Could not load video job status.");
+      }
     }
 
     currentVideoJob = {
@@ -2177,7 +2441,17 @@ async function createVideoJobFromPlan(includeTts = false) {
     include_tts: includeTts,
     duration: currentShortPlan.duration,
   });
-  pollVideoJob(currentVideoJob);
+  if (data.status === "queued" && !includeTts) {
+    try {
+      await renderShortVideoInBrowser(currentShortPlan, currentVideoJob);
+    } catch (error) {
+      currentVideoJob = { ...currentVideoJob, status: "failed", error: error.message };
+      renderVideoJobState(currentVideoJob);
+      els.shortsStatus.textContent = error.message;
+    }
+  } else {
+    pollVideoJob(currentVideoJob);
+  }
 }
 
 function renderShortPlan(plan) {

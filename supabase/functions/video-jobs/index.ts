@@ -448,6 +448,9 @@ async function createVideoJob(request: Request) {
   const compositionHtml = buildCompositionHtml("pending", paper, scenes, duration);
   const supabase = adminClient();
   const userId = await getUserId(request);
+  if (!userId) {
+    return jsonResponse({ error: "Sign in to create a video export." }, 401);
+  }
 
   const renderManifest = {
     renderer: "papertrail-geometric-v1",
