@@ -58,6 +58,9 @@ const els = {
   shortsDuration: document.querySelector("#shorts-duration"),
   shortsStatus: document.querySelector("#shorts-status"),
   shortsOutput: document.querySelector("#shorts-output"),
+  shortsSourceCard: document.querySelector("#shorts-source-card"),
+  shortsPaperSelect: document.querySelector("#shorts-paper-select"),
+  shortsUsePaperButton: document.querySelector("#shorts-use-paper"),
   authForm: document.querySelector("#auth-form"),
   authEmail: document.querySelector("#auth-email"),
   authPassword: document.querySelector("#auth-password"),
@@ -1867,6 +1870,47 @@ function makeManualShortPaper() {
   });
 }
 
+function getStoredPaperList(storageKey) {
+  const stored = loadStoredJson(storageKey);
+  return Array.isArray(stored?.papers) ? stored.papers.map(normalizePaperMath) : [];
+}
+
+function getShortSourcePapers() {
+  const seen = new Set();
+  const sourcePapers = [
+    ...getStoredPaperList(SEARCH_STATE_KEY),
+    ...getStoredPaperList(RECOMMENDATION_STATE_KEY),
+    ...readingList.map(normalizePaperMath),
+  ];
+
+  return sourcePapers.filter((paper) => {
+    const key = paper.id || paper.url || paper.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getShortSourcePaperById(paperId) {
+  return getShortSourcePapers().find((paper) => String(paper.id) === String(paperId));
+}
+
+function refreshShortSourcePicker() {
+  if (!els.shortsSourceCard || !els.shortsPaperSelect) return;
+  const papers = getShortSourcePapers();
+  els.shortsSourceCard.hidden = papers.length === 0;
+  els.shortsPaperSelect.replaceChildren();
+
+  papers.forEach((paper) => {
+    const option = document.createElement("option");
+    option.value = paper.id;
+    const title = cleanText(paper.title, "Untitled paper");
+    const meta = [paper.year, paper.authors].filter(Boolean).join(" / ");
+    option.textContent = meta ? `${title} (${meta})` : title;
+    els.shortsPaperSelect.append(option);
+  });
+}
+
 function getVisualVocabulary(paper) {
   const haystack = normalizeSearchText(`${paper.title} ${paper.summary} ${paper.concepts.join(" ")}`);
 
@@ -3209,6 +3253,7 @@ function renderReadingList() {
     { hash: "#reading-list", source: "reading-list" }
   );
   els.clearListButton.disabled = readingList.length === 0;
+  refreshShortSourcePicker();
 }
 
 function restoreDiscoveryViews() {
@@ -3263,12 +3308,23 @@ function restoreDiscoveryViews() {
     renderShortPlan(lastShort.plan);
     els.shortsStatus.textContent = "Restored your last generated visual short.";
   }
+
+  refreshShortSourcePicker();
 }
 
 function handleShorts(event) {
   event.preventDefault();
   if (!els.shortsForm.reportValidity()) return;
   generateShortForPaper(makeManualShortPaper(), { source: "manual" });
+}
+
+function handleShortSourceSelection() {
+  const paper = getShortSourcePaperById(els.shortsPaperSelect?.value);
+  if (!paper) {
+    els.shortsStatus.textContent = "Search OpenAlex first, then choose a paper to generate a visual short.";
+    return;
+  }
+  generateShortForPaper(paper, { source: "shorts-source-picker" });
 }
 
 async function finishFullTextIngestion(paper, extraction, trackingPayload = {}) {
@@ -3390,6 +3446,7 @@ async function handleSearch(event) {
       hash: "#search",
       source: "search",
     });
+    refreshShortSourcePicker();
   } catch (error) {
     await trackEvent("search_failed", { query, precision });
     els.searchStatus.textContent =
@@ -3436,6 +3493,7 @@ async function handleRecommendations(event) {
       "No recommendations found. Try a more specific mix of methods and topics.",
       { hash: "#recommendations", source: "recommendations" }
     );
+    refreshShortSourcePicker();
   } catch (error) {
     await trackEvent("recommendations_failed", { interest_length: interests.length });
     els.recommendationStatus.textContent =
@@ -3447,6 +3505,7 @@ els.searchForm.addEventListener("submit", handleSearch);
 els.ingestForm.addEventListener("submit", handleIngest);
 els.interestForm.addEventListener("submit", handleRecommendations);
 els.shortsForm.addEventListener("submit", handleShorts);
+els.shortsUsePaperButton?.addEventListener("click", handleShortSourceSelection);
 els.authForm.addEventListener("submit", handleSignIn);
 els.signUpButton.addEventListener("click", handleSignUp);
 els.signOutButton.addEventListener("click", handleSignOut);

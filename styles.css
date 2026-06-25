@@ -520,6 +520,27 @@ select:focus {
   backdrop-filter: blur(18px);
 }
 
+.shorts-source-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(88, 230, 255, 0.24);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(88, 230, 255, 0.08);
+}
+
+.shorts-source-card strong {
+  color: var(--accent);
+  font-size: 0.94rem;
+}
+
+.shorts-source-card p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .short-output {
   min-height: 420px;
 }

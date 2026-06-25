@@ -10,7 +10,7 @@
     >
     <link rel="preconnect" href="https://api.openalex.org">
     <link rel="preload" as="image" href="assets/quantum-hero.png">
-    <link rel="stylesheet" href="styles.css?v=20260623-browser-video">
+    <link rel="stylesheet" href="styles.css?v=20260625-shorts-picker">
   </head>
   <body>
     <header class="site-header">
@@ -182,12 +182,26 @@
         </div>
         <div class="shorts-workbench">
           <form class="shorts-panel" id="shorts-form">
+            <div class="shorts-source-card" id="shorts-source-card" hidden>
+              <div>
+                <strong>Generate from a searched paper</strong>
+                <p>Select a paper from your latest OpenAlex search, recommendations, or research library.</p>
+              </div>
+              <label for="shorts-paper-select">Available papers</label>
+              <select id="shorts-paper-select"></select>
+              <div class="export-actions">
+                <button class="button small primary" id="shorts-use-paper" type="button">
+                  Generate from paper
+                </button>
+                <a class="button small" href="#search">Search papers</a>
+              </div>
+            </div>
             <label for="shorts-title">Paper title</label>
             <input
               id="shorts-title"
               name="title"
               type="text"
-              placeholder="Paste a title or use the Visual short button on a paper"
+              placeholder="Paste a title or choose a searched paper above"
               required
             >
             <label for="shorts-abstract">Abstract, summary, or notes</label>
@@ -409,7 +423,7 @@
         <div class="card-actions">
           <button class="button small ingest-paper-button" type="button">Ingest full text</button>
           <a class="button small paper-link" target="_blank" rel="noreferrer">Open paper</a>
-          <button class="button small short-button" type="button">Visual short</button>
+          <button class="button small short-button" type="button">Generate short</button>
           <button class="button small save-button" type="button"></button>
         </div>
       </article>
@@ -465,6 +479,6 @@
     <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js?v=20260621"></script>
-    <script src="script.js?v=20260623-browser-video" defer></script>
+    <script src="script.js?v=20260625-shorts-picker" defer></script>
   </body>
 </html>
